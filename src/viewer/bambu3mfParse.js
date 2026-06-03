@@ -80,6 +80,107 @@ function parseDefaultExtruder(modelSettings) {
   return match ? parseInt(match[1], 10) : 1;
 }
 
+export { parseDefaultExtruder };
+
+/** Componentes multi-peça (ex.: corpo + rosto + olhos montados por transform). */
+export function parseAssemblyComponents(mainModelXml) {
+  const components = [];
+  const re = /<component[^>]*\/>/gi;
+  let match;
+
+  while ((match = re.exec(mainModelXml)) !== null) {
+    const tag = match[0];
+    const pathAttr =
+      tag.match(/p:path="([^"]*)"/i)?.[1] ?? tag.match(/\spath="([^"]*)"/i)?.[1];
+    const objectId = parseInt(tag.match(/objectid="(\d+)"/i)?.[1] ?? '0', 10);
+    const transform = tag.match(/transform="([^"]*)"/i)?.[1];
+
+    if (!pathAttr || !objectId) continue;
+
+    components.push({
+      path: pathAttr.replace(/^\//, ''),
+      objectId,
+      transform: transform ? transform.trim().split(/\s+/).map(Number) : null,
+    });
+  }
+
+  return components;
+}
+
+export function extractInnerObjectXml(objectFileXml, objectId) {
+  const re = new RegExp(`<object\\s+id="${objectId}"[\\s\\S]*?<\\/object>`, 'i');
+  return objectFileXml.match(re)?.[0] ?? null;
+}
+
+/** Extruder por part id (1-based) em model_settings.config. */
+export function parsePartExtruders(modelSettings) {
+  const map = new Map();
+  if (!modelSettings) return map;
+
+  const partRe = /<part id="(\d+)"[\s\S]*?<\/part>/gi;
+  let match;
+
+  while ((match = partRe.exec(modelSettings)) !== null) {
+    const partId = parseInt(match[1], 10);
+    const extruders = [...match[0].matchAll(/key="extruder"\s+value="(\d+)"/gi)];
+    const ext = extruders.at(-1)?.[1];
+    if (ext) map.set(partId, parseInt(ext, 10));
+  }
+
+  return map;
+}
+
+export function readZipEntryText(files, suffix) {
+  return readZipText(files, suffix);
+}
+
+/** Multicolor AMS: triângulos com paint_color no mesh (ex.: Pikachu, Mewtwo). */
+export function objectXmlHasPaintColor(objectXml) {
+  if (!objectXml) return false;
+  return /<triangle[^>]*paint_color="(?!0")[^"]+"/i.test(objectXml);
+}
+
+const SUPPORT_PART_RE =
+  /support|suporte|generic|générique|generique|cube|brim|skirt|raft|pin|dummy|placeholder|prime/i;
+
+/** Metadados por part id em model_settings.config. */
+export function parsePartMetadata(modelSettings) {
+  const map = new Map();
+  if (!modelSettings) return map;
+
+  const partRe = /<part id="(\d+)"[\s\S]*?<\/part>/gi;
+  let match;
+
+  while ((match = partRe.exec(modelSettings)) !== null) {
+    const partId = parseInt(match[1], 10);
+    const block = match[0];
+    const name = block.match(/key="name"\s+value="([^"]*)"/i)?.[1] ?? '';
+    const subtype = block.match(/subtype="([^"]*)"/i)?.[1] ?? '';
+    const extruder = block.match(/key="extruder"\s+value="(\d+)"/i)?.[1];
+
+    if (!map.has(partId)) {
+      map.set(partId, {
+        name,
+        subtype,
+        extruder: extruder ? parseInt(extruder, 10) : null,
+      });
+    }
+  }
+
+  return map;
+}
+
+export function isSupportPartMeta(meta, innerObjectXml) {
+  if (meta?.name && SUPPORT_PART_RE.test(meta.name)) return true;
+  if (meta?.subtype && /support/i.test(meta.subtype)) return true;
+
+  const triCount = (innerObjectXml?.match(/<triangle/g) || []).length;
+  const hasPaint = objectXmlHasPaintColor(innerObjectXml);
+  if (triCount > 0 && triCount < 100 && !hasPaint) return true;
+
+  return false;
+}
+
 function parseObjectModelPath(mainModelXml) {
   const match = mainModelXml.match(/p:path="([^"]+\.model)"/i);
   if (!match) return '3D/Objects/object_1.model';
@@ -116,6 +217,23 @@ export function extractFilamentColorsFrom3mfBuffer(buffer) {
   const modelSettings = readZipText(files, 'Metadata/model_settings.config');
   const filamentColours = parseFilamentColours(projectSettings);
   const defaultExtruder = parseDefaultExtruder(modelSettings);
+  const components = parseAssemblyComponents(mainModel);
+
+  if (components.length > 1) {
+    const partExtruders = parsePartExtruders(modelSettings);
+    const slots = new Set([defaultExtruder, ...partExtruders.values()]);
+    const seen = new Set();
+    const colors = [];
+
+    for (const slot of [...slots].sort((a, b) => a - b)) {
+      const hex = normalizeColorHex(filamentColours[slot - 1]);
+      if (!hex || seen.has(hex)) continue;
+      seen.add(hex);
+      colors.push(hex);
+    }
+
+    return colors;
+  }
 
   const objectPath = parseObjectModelPath(mainModel);
   const objectXml = readZipText(files, objectPath);

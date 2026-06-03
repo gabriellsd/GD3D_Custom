@@ -1,6 +1,40 @@
 // Gerado automaticamente por npm run products:sync — não editar à mão.
 export const CATALOG_PRODUCTS = [
   {
+  id: 3,
+  category: "Miniaturas",
+  name: "Coruja de Tricô Decorativa 6cm - Impressão 3D",
+  price: 29.9,
+  icon: "fa-solid fa-crow",
+  desc: "Adicione um toque especial à sua decoração com esta coruja produzida em impressão 3D de alta qualidade. Com excelente nível de detalhes e acabamento, é perfeita para decorar quartos, escritórios, estantes ou presentear amantes de corujas e da natureza.",
+  tag: "Miniaturas",
+  subcategory: "Animais",
+  previewImage: "/products/Miniaturas/Animais/coruja_de_trico/view-0.png",
+  previewImages: ["/products/Miniaturas/Animais/coruja_de_trico/view-0.png", "/products/Miniaturas/Animais/coruja_de_trico/view-1.png", "/products/Miniaturas/Animais/coruja_de_trico/view-2.png"],
+  model3mfUrl: "/products/Miniaturas/Animais/coruja_de_trico/owl_ams.3mf",
+  colors: ["#6F5034", "#FFFFFF", "#000000", "#FF9016"],
+  sizes: ["6 cm"],
+  modelColor: "#6F5034",
+  modelRotation: {
+    x: -1.5707963267948966,
+    y: 0,
+    z: 0
+  },
+  modelFacing: 3.141592653589793,
+  model3mfRotation: {
+    x: -1.5707963267948966,
+    y: 0,
+    z: 0
+  },
+  model3mfFacing: 3.141592653589793,
+  card3mfRotation: {
+    x: -1.5707963267948966,
+    y: 0,
+    z: 0
+  },
+  card3mfFacing: 3.141592653589793
+  },
+  {
   id: 4,
   category: "Miniaturas",
   name: "Mewtwo Decorativo 15cm - Impressão 3D",
@@ -13,7 +47,7 @@ export const CATALOG_PRODUCTS = [
   previewImages: ["/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-1.png", "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-2.png", "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-3w.png"],
   modelUrl: "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/Mewtwo.stl",
   model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/Mewtwo_Multicolor.3mf",
-  colors: ["#8000FF", "#DBDBDB", "#000000", "#FFFFFF"],
+  colors: ["#8000FF"],
   sizes: ["15 cm"],
   modelColor: "#f5c518",
   modelRotation: {
@@ -30,7 +64,7 @@ export const CATALOG_PRODUCTS = [
   model3mfFacing: 3.141592653589793
   },
   {
-  id: 3,
+  id: 5,
   category: "Miniaturas",
   name: "Pikachu Decorativo 10cm - Impressão 3D",
   price: 34.9,

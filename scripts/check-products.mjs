@@ -20,8 +20,8 @@ for (const item of catalog) {
   } else {
     const files = fs.readdirSync(dir);
     if (!files.some((f) => /\.png$/i.test(f))) issues.push('sem imagem .png');
-    if (!files.some((f) => /\.stl$/i.test(f))) issues.push('sem ficheiro .stl');
-    if (!files.some((f) => /\.3mf$/i.test(f))) issues.push('sem ficheiro .3mf');
+    const has3d = files.some((f) => /\.stl$/i.test(f) || /\.3mf$/i.test(f) || /\.mf3$/i.test(f));
+    if (!has3d) issues.push('sem ficheiro .3mf ou .stl');
   }
 
   if (item.model3mfUrl) {

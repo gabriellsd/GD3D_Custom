@@ -1,0 +1,4 @@
+preco=29,90
+nome=Coruja de Tricô Decorativa 6cm - Impressão 3D
+tamanhos=6 cm
+descricao=Adicione um toque especial à sua decoração com esta coruja produzida em impressão 3D de alta qualidade. Com excelente nível de detalhes e acabamento, é perfeita para decorar quartos, escritórios, estantes ou presentear amantes de corujas e da natureza.
