@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#080808">
+    <style>html,body{background-color:#0a0a0a;color:#f3f4f6}</style>
+    <link rel="stylesheet" href="/src/style.css">
+    <title>Loja — Modelos 3D Prontos | GD3D Creative</title>
+    <link rel="icon" type="image/png" href="/favicon.png?v=gd3d-preto">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="site-chrome"></div>
+    <main>
+        <div id="shop-filters-wrap" class="shop-filters-wrap sticky z-40 w-full" style="top: var(--header-offset, 5rem)">
+            <div id="shop-filters-main" class="shop-filters-main flex w-full items-center gap-1 sm:gap-2 px-4 sm:px-6 lg:px-8 py-2 sm:py-3" role="tablist"></div>
+            <div id="shop-filters-submenu" class="shop-filters-submenu hidden"></div>
+        </div>
+
+        <section class="w-full px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 pt-3 sm:pt-4">
+            <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 items-stretch"></div>
+        </section>
+    </main>
+    <div id="site-footer"></div>
+    <script type="module" src="/src/pages/produtos.js"></script>
+</body>
+</html>

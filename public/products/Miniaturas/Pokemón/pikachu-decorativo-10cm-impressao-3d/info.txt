@@ -1,0 +1,4 @@
+preco=34,90
+nome=Pikachu Decorativo 10cm - Impressão 3D
+tamanhos=10 cm
+descricao=Adicione um toque especial à sua coleção com este Pikachu produzido em impressão 3D de alta qualidade. Com ótimo nível de detalhes e acabamento, é perfeito para decorar quartos, escritórios, setups gamers ou presentear fãs de Pokémon.

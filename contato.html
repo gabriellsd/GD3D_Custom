@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#080808">
+    <style>html,body{background-color:#080808;color:#f3f4f6}</style>
+    <link rel="stylesheet" href="/src/style.css">
+    <title>Projeto à Medida — GD3D Creative</title>
+    <link rel="icon" type="image/png" href="/favicon.png?v=gd3d-preto">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="site-chrome"></div>
+    <main>
+        <section class="py-16 bg-slate-900/40 border-t border-slate-900">
+            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 p-8 sm:p-12 rounded-3xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-3xl"></div>
+                    <div class="text-center space-y-4 mb-10">
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-brand-500">Serviço opcional</span>
+                        <h1 class="text-3xl font-extrabold text-white mt-2">Projeto à Medida</h1>
+                        <p class="text-slate-400 text-sm max-w-xl mx-auto">
+                            O nosso foco é a <a href="/produtos.html" class="text-brand-500 hover:underline">loja de modelos prontos</a>. Se tens um ficheiro 3D próprio ou uma ideia especial, envia os detalhes e respondemos com orçamento.
+                        </p>
+                    </div>
+                    <form id="budget-form" class="space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Seu Nome</label>
+                                <input type="text" id="budget-name" required placeholder="Ex: Gabriel Dias" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition outline-none">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Link do Modelo ou Detalhes</label>
+                                <input type="text" id="budget-link" placeholder="Ex: https://www.printables.com/model/..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition outline-none">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Material Pretendido</label>
+                                <select id="budget-material" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition outline-none">
+                                    <option value="PLA">PLA (Melhor acabamento / Estético)</option>
+                                    <option value="PETG">PETG (Mais Resistente / Exterior)</option>
+                                    <option value="TPU">TPU (Borracha / Flexível)</option>
+                                    <option value="Não sei">Não sei, preciso de ajuda técnica</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Tamanho Aproximado (cm)</label>
+                                <input type="text" id="budget-size" placeholder="Ex: 15cm de altura" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition outline-none">
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Mensagem ou Especificações</label>
+                            <textarea id="budget-message" rows="4" placeholder="Indique quantidade, cor pretendida e finalidade do objeto..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition outline-none resize-none"></textarea>
+                        </div>
+                        <button type="submit" class="w-full py-4 bg-gradient-to-r from-brand-600 via-brand-500 to-brand-accent text-brand-900 font-extrabold rounded-xl transition shadow-lg shadow-brand-500/15 transform hover:-translate-y-0.5">
+                            <i class="fa-brands fa-whatsapp text-lg mr-2"></i>Enviar Solicitação via WhatsApp
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+    <div id="site-footer"></div>
+    <script type="module" src="/src/pages/contato.js"></script>
+</body>
+</html>

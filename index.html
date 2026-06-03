@@ -1,0 +1,90 @@
+﻿<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#080808">
+    <style>html,body{background-color:#080808;color:#f3f4f6}</style>
+    <link rel="stylesheet" href="/src/style.css">
+    <title>GD3D Creative — Loja de Modelos 3D Prontos</title>
+    <link rel="icon" type="image/png" href="/favicon.png?v=gd3d-preto">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="site-chrome"></div>
+    <main>
+        <section class="relative overflow-hidden pt-10 pb-12 sm:pt-14 sm:pb-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                    <div class="lg:col-span-7 space-y-6 text-center lg:text-left">
+                        <h1 class="text-4xl sm:text-6xl font-black tracking-tight leading-[1.1] text-white">
+                            Modelos 3D Prontos
+                        </h1>
+                        <p class="text-slate-400 text-lg max-w-xl mx-auto lg:mx-0">
+                            Decoração, gaming, escritório ou utilitários do dia a dia, encomende em poucos cliques.
+                        </p>
+                        <div class="flex flex-wrap justify-center lg:justify-start gap-4 pt-4">
+                            <a href="/produtos.html" class="px-6 py-3.5 bg-brand-500 hover:bg-brand-600 text-brand-900 font-bold rounded-xl shadow-lg shadow-brand-500/25 transition flex items-center gap-2">
+                                <i class="fa-solid fa-store"></i> Ver Catálogo <i class="fa-solid fa-arrow-right"></i>
+                            </a>
+                            <a href="/contato.html" class="px-6 py-3.5 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold rounded-xl border border-slate-700 hover:border-slate-600 transition text-sm">
+                                Tem um projeto à medida?
+                            </a>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 pt-8 border-t border-slate-800/80 max-w-md mx-auto lg:mx-0">
+                            <div>
+                                <span class="block text-2xl font-bold text-white">0.1mm</span>
+                                <span class="text-xs text-slate-500">Resolução Máxima</span>
+                            </div>
+                            <div>
+                                <span class="block text-2xl font-bold text-white">15+</span>
+                                <span class="text-xs text-slate-500">Cores Disponíveis</span>
+                            </div>
+                            <div>
+                                <span class="block text-2xl font-bold text-white">Eco</span>
+                                <span class="text-xs text-slate-500">PLA Bioplástico</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-5">
+                        <a href="/produtos.html" class="lab-card block group">
+                            <div class="lab-card-visual bg-gradient-to-br from-amber-600/40 via-violet-900/30 to-slate-950 min-h-[280px]">
+                                <div class="relative z-[1] grid grid-cols-3 gap-6 text-5xl text-white/90 group-hover:scale-105 transition duration-500">
+                                    <i class="fa-solid fa-dragon drop-shadow-lg"></i>
+                                    <i class="fa-solid fa-lightbulb drop-shadow-lg"></i>
+                                    <i class="fa-solid fa-headphones drop-shadow-lg"></i>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <h2 class="text-xl font-bold text-white">Explorar o catálogo</h2>
+                                <p class="text-sm text-slate-400 mt-2">Escolhe o modelo, vê em 3D e encomenda em poucos cliques.</p>
+                                <span class="inline-flex items-center gap-2 mt-4 text-sm font-bold text-white group-hover:text-brand-400 transition">
+                                    Ver todos os modelos <i class="fa-solid fa-arrow-right"></i>
+                                </span>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
+            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+                <div>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-brand-500">Loja</span>
+                    <h2 class="text-2xl sm:text-3xl font-extrabold text-white mt-1">Modelos em destaque</h2>
+                    <p class="text-slate-400 text-sm mt-2 max-w-lg">Abre o visualizador 3D, gira o modelo e encomenda com as cores do ficheiro multicolor.</p>
+                </div>
+                <a href="/produtos.html" class="shrink-0 inline-flex items-center gap-2 text-sm font-bold text-brand-500 hover:text-brand-400 transition">
+                    Ver catálogo completo <i class="fa-solid fa-arrow-right text-xs"></i>
+                </a>
+            </div>
+            <div id="home-featured-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"></div>
+        </section>
+    </main>
+    <div id="site-footer"></div>
+    <script type="module" src="/src/pages/home.js"></script>
+</body>
+</html>

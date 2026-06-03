@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#080808">
+    <style>html,body{background-color:#080808;color:#f3f4f6}</style>
+    <link rel="stylesheet" href="/src/style.css">
+    <title>Visualizar em 3D — GD3D Creative</title>
+    <link rel="icon" type="image/png" href="/favicon.png?v=gd3d-preto">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="site-chrome"></div>
+    <main>
+        <section class="py-16 bg-slate-900/30 border-y border-slate-900">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="text-center max-w-3xl mx-auto mb-12">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-brand-500">Visualização 3D</span>
+                    <h1 class="text-3xl sm:text-4xl font-extrabold text-white mt-1">Veja o produto em 3D</h1>
+                    <p class="text-slate-400 mt-2">Gire, aproxime e explore o modelo antes de encomendar na <a href="/produtos.html" class="text-brand-500 hover:underline">loja</a>. Assim percebe melhor o tamanho, a forma e o aspeto da peça impressa.</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch lg:items-start">
+                    <div class="lg:col-span-4 flex flex-col gap-4 min-h-0 lg:sticky lg:top-[var(--header-offset,5rem)]">
+                        <div class="viewer-catalog-panel flex flex-col flex-1 min-h-0 bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-5">
+                            <h2 id="viewer-panel-title" class="text-sm font-bold text-white mb-3 shrink-0"><i class="fa-solid fa-store text-brand-500 mr-2"></i>Produto da loja</h2>
+                            <div id="viewer-product-list" class="viewer-product-list flex flex-col gap-4 flex-1 min-h-0"></div>
+                        </div>
+                        <div class="shrink-0 space-y-2">
+                            <button type="button" data-viewer-order class="w-full py-3 text-center bg-brand-500 hover:bg-brand-400 text-brand-900 font-bold rounded-xl transition">
+                                <i class="fa-solid fa-cart-plus mr-1"></i> Encomendar agora
+                            </button>
+                            <a href="/produtos.html" class="block w-full py-2.5 text-center text-sm text-slate-400 hover:text-white transition">
+                                Ver catálogo completo
+                            </a>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-8 viewer-stage">
+                        <div class="absolute top-4 left-4 z-10 flex flex-col gap-1 max-w-[70%] pointer-events-none">
+                            <div id="viewer-colors-wrap" class="hidden bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-800 pointer-events-auto">
+                                <p class="text-[10px] text-slate-500 mb-1">Cores do ficheiro 3MF</p>
+                                <div id="viewer-colors" class="flex flex-wrap gap-1.5"></div>
+                            </div>
+                            <p id="viewer-drag-hint" class="text-[10px] text-slate-500 px-1">Arraste em qualquer direção para rodar o produto · roda para zoom</p>
+                        </div>
+                        <div class="absolute top-4 right-4 z-10">
+                            <button type="button" data-reset-camera class="p-2 bg-slate-900/80 rounded-lg border border-slate-800 text-xs text-slate-300 hover:bg-slate-800 transition">
+                                <i class="fa-solid fa-arrows-rotate"></i> Centrar
+                            </button>
+                        </div>
+                        <div id="customizer-canvas" class="viewer-canvas-host"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <div id="site-footer"></div>
+    <script type="module" src="/src/pages/visualizador.js"></script>
+</body>
+</html>

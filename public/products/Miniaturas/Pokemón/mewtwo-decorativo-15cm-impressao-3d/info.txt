@@ -1,0 +1,4 @@
+preco=49,90
+nome=Mewtwo Decorativo 15cm - Impressão 3D
+tamanhos=15 cm
+descricao=Adicione um toque especial à sua coleção com este Mewtwo produzido em impressão 3D de alta qualidade. Com excelente nível de detalhes e acabamento, é perfeito para decorar quartos, escritórios, setups gamers ou presentear fãs de Pokémon.

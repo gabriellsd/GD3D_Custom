@@ -1,0 +1,25 @@
+{
+  "name": "gd3d-creative",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "products:sync": "node scripts/sync-products.mjs",
+    "products:new": "node scripts/new-product.mjs",
+    "products:rename": "node scripts/rename-product-folders.mjs",
+    "products:check": "node scripts/check-products.mjs",
+    "predev": "node scripts/sync-products.mjs",
+    "prebuild": "node scripts/sync-products.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.175.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.7",
+    "tailwindcss": "^4.1.7",
+    "vite": "^6.3.5"
+  }
+}
