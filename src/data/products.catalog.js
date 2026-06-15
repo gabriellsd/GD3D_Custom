@@ -14,6 +14,8 @@ export const CATALOG_PRODUCTS = [
   model3mfUrl: "/products/Miniaturas/Animais/coruja_de_trico/owl_ams.3mf",
   colors: ["#6F5034", "#FFFFFF", "#000000", "#FF9016"],
   sizes: ["6 cm"],
+  featured: true,
+  featuredOrder: 1,
   modelColor: "#6F5034",
   modelRotation: {
     x: -1.5707963267948966,
@@ -26,13 +28,13 @@ export const CATALOG_PRODUCTS = [
     y: 0,
     z: 0
   },
-  model3mfFacing: 3.141592653589793,
+  model3mfFacing: 0,
   card3mfRotation: {
     x: -1.5707963267948966,
     y: 0,
     z: 0
   },
-  card3mfFacing: 3.141592653589793
+  card3mfFacing: 0
   },
   {
   id: 4,
@@ -49,6 +51,8 @@ export const CATALOG_PRODUCTS = [
   model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/Mewtwo_Multicolor.3mf",
   colors: ["#8000FF"],
   sizes: ["15 cm"],
+  featured: false,
+  featuredOrder: 3,
   modelColor: "#f5c518",
   modelRotation: {
     x: -1.5707963267948966,
@@ -58,10 +62,16 @@ export const CATALOG_PRODUCTS = [
   modelFacing: 3.141592653589793,
   model3mfRotation: {
     x: 0,
-    y: 0,
+    y: 3.141592653589793,
     z: 0
   },
-  model3mfFacing: 3.141592653589793
+  model3mfFacing: 3.141592653589793,
+  card3mfRotation: {
+    x: 0,
+    y: 3.141592653589793,
+    z: 0
+  },
+  card3mfFacing: 3.141592653589793
   },
   {
   id: 5,
@@ -78,6 +88,8 @@ export const CATALOG_PRODUCTS = [
   model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/pikachu-decorativo-10cm-impressao-3d/Pikachu_Multicolor.3mf",
   colors: ["#FFFF00", "#FFFFFF", "#000000", "#FF0000", "#804000"],
   sizes: ["10 cm"],
+  featured: true,
+  featuredOrder: 2,
   modelColor: "#f5c518",
   modelRotation: {
     x: -1.5707963267948966,
@@ -90,6 +102,7 @@ export const CATALOG_PRODUCTS = [
     y: 0,
     z: 0
   },
-  model3mfFacing: 3.141592653589793
+  model3mfFacing: 3.141592653589793,
+  card3mfFacing: 3.141592653589793
   }
 ];

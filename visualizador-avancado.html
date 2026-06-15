@@ -1,0 +1,320 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#1e1e2e" />
+  <link rel="icon" href="/favicon.png?v=gd3d-preto" type="image/png" />
+  <title>Admin · Visualizador técnico — GD3D</title>
+  <link rel="stylesheet" href="/src/viewer/advanced/viewer-advanced.css" />
+  <style>
+    .viewer-advanced-page { display: flex; flex-direction: column; height: 100vh; background: #181825; }
+    .viewer-admin-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0.5rem 1rem;
+      background: #11111b;
+      border-bottom: 1px solid #313244;
+      font-size: 12px;
+      color: #a6adc8;
+    }
+    .viewer-admin-bar strong { color: #cba6f7; font-weight: 700; }
+    .viewer-admin-bar a { color: #89b4fa; text-decoration: none; }
+    .viewer-admin-bar a:hover { text-decoration: underline; }
+    .viewer-advanced-root {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+    .viewer-advanced-root aside { height: 100%; }
+    .viewer-advanced-root .viewer { min-height: 0; }
+    .gd3d-produto-painel {
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .gd3d-produto-painel a { color: #89b4fa; }
+  </style>
+</head>
+<body class="viewer-advanced-page">
+  <header class="viewer-admin-bar">
+    <span><strong>Admin</strong> · visualizador técnico (uso interno)</span>
+    <span>
+      <a href="/login.html" data-auth-logout-admin style="margin-right:12px">Sair</a>
+      <a href="/">Ir ao site</a>
+    </span>
+  </header>
+  <div class="viewer-advanced-root">
+  <aside>
+    <div>
+      <h1>Visualizador técnico</h1>
+      <p>Validar 3MF, orientação, malha, cores AMS e export — não é página pública da loja.</p>
+    </div>
+
+    <div id="gd3d-produto-painel" class="gd3d-produto-painel hidden">
+      <strong id="gd3d-produto-titulo">Produto</strong>
+      <p style="margin-top:6px"><a id="gd3d-link-loja" href="/visualizador.html">Visualização simples</a></p>
+    </div>
+
+    <div class="acoes">
+      <div class="acoes-principais">
+        <label class="btn btn-primary upload">
+          Abrir modelo
+          <input id="file-input" type="file" accept=".obj,.stl,.ply,.glb,.gltf,.3mf,.mf3,.off,.fbx,.amf,.gcode,.gco,.zip,.step,.stp,.png,.jpg,.jpeg,.tga" multiple />
+        </label>
+      </div>
+
+      <div class="info-section">
+        <button type="button" class="info-section-header" aria-expanded="false">
+          <span class="info-chevron">▸</span>Exibição
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+
+        <label class="toggle-linha">
+          <span>Cores originais</span>
+          <input type="checkbox" id="chk-cores" checked />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Wireframe</span>
+          <input type="checkbox" id="chk-wireframe" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Giro automático</span>
+          <input type="checkbox" id="chk-giro-auto" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Sombra no chão</span>
+          <input type="checkbox" id="chk-sombra" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Caixa delimitadora</span>
+          <input type="checkbox" id="chk-bbox" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Referência 1 cm</span>
+          <input type="checkbox" id="chk-referencia" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Ortográfico</span>
+          <input type="checkbox" id="chk-ortografico" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Overhangs (&gt;45°)</span>
+          <input type="checkbox" id="chk-overhangs" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Régua (2 cliques)</span>
+          <input type="checkbox" id="chk-regua" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha">
+          <span>Plano de corte</span>
+          <input type="checkbox" id="chk-plano-corte" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <label class="toggle-linha hidden" id="linha-suportes">
+          <span>Mostrar suportes</span>
+          <input type="checkbox" id="chk-suportes" />
+          <span class="toggle-ui"></span>
+        </label>
+
+        <div class="slider-linha">
+          <span>Iluminação</span>
+          <input type="range" id="slider-luz" min="0.2" max="2.5" step="0.05" value="1.1" />
+        </div>
+
+        <div class="slider-linha">
+          <span>Altura do corte</span>
+          <input type="range" id="slider-plano-corte" min="-10" max="10" step="0.01" value="0" />
+        </div>
+
+        <div class="opcao-grupo">
+          <span class="opcao-label">Fundo</span>
+          <div class="fundos" id="fundos">
+            <button type="button" class="fundo-btn ativo" data-index="0" style="background:#1e1e2e" title="Escuro" aria-label="Fundo escuro"></button>
+            <button type="button" class="fundo-btn" data-index="1" style="background:#11111b" title="Preto" aria-label="Fundo preto"></button>
+            <button type="button" class="fundo-btn" data-index="2" style="background:#ffffff;border-color:#585b70" title="Branco" aria-label="Fundo branco"></button>
+            <button type="button" class="fundo-btn" data-index="3" style="background:#2d2d2d" title="Cinza" aria-label="Fundo cinza"></button>
+          </div>
+        </div>
+
+        <div class="opcao-grupo">
+          <span class="opcao-label">Vistas</span>
+          <div class="btn-row">
+            <button type="button" class="btn btn-secundario btn-vista" data-vista="frente">Frente</button>
+            <button type="button" class="btn btn-secundario btn-vista" data-vista="topo">Topo</button>
+            <button type="button" class="btn btn-secundario btn-vista" data-vista="lateral">Lateral</button>
+            <button type="button" class="btn btn-secundario btn-vista" data-vista="iso">Iso</button>
+          </div>
+        </div>
+
+        </div>
+      </div>
+
+      <div class="info-section">
+        <button type="button" class="info-section-header" aria-expanded="false">
+          <span class="info-chevron">▸</span>Impressão 3D
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <label class="toggle-linha">
+            <span>Mesa de impressão</span>
+            <input type="checkbox" id="chk-mesa" />
+            <span class="toggle-ui"></span>
+          </label>
+          <label class="select-linha">
+            <span>Tamanho da mesa</span>
+            <select id="sel-mesa"></select>
+          </label>
+          <p id="mesa-status" class="aviso-ok"></p>
+          <button type="button" class="btn btn-secundario" id="btn-auto-orient">Auto-orientar</button>
+          <label class="input-linha">
+            <span>Escalar maior dimensão (mm)</span>
+            <input type="number" id="input-escala-mm" min="1" step="0.1" placeholder="ex: 100" />
+          </label>
+          <button type="button" class="btn btn-secundario" id="btn-escala">Aplicar escala</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <button type="button" class="info-section-header" aria-expanded="false">
+          <span class="info-chevron">▸</span>Peças e comparação
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <div class="arvore-pecas" id="arvore-pecas">
+            <p class="info-vazio">Nenhuma peça</p>
+          </div>
+          <label class="select-linha">
+            <span>Material preview</span>
+            <select id="sel-material"></select>
+          </label>
+          <label class="select-linha">
+            <span>Comparar com</span>
+            <input id="input-comparacao" type="file" accept=".obj,.stl,.ply,.glb,.gltf,.3mf,.off,.fbx" />
+          </label>
+          <label class="select-linha">
+            <span>Modo comparação</span>
+            <select id="sel-modo-comparacao">
+              <option value="ghost">Sobreposto (fantasma)</option>
+              <option value="lado">Lado a lado</option>
+            </select>
+          </label>
+          <div class="slider-linha">
+            <span>Opacidade comparação</span>
+            <input type="range" id="slider-opacidade-comp" min="0.1" max="1" step="0.05" value="0.45" />
+          </div>
+          <button type="button" class="btn btn-secundario" id="btn-limpar-comparacao">Limpar comparação</button>
+        </div>
+      </div>
+
+      <div class="info-section hidden" id="secao-gcode">
+        <button type="button" class="info-section-header" aria-expanded="true">
+          <span class="info-chevron">▸</span>G-code
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <div class="slider-linha">
+            <span>Camada</span>
+            <input type="range" id="slider-gcode-camada" min="0" max="100" step="1" value="100" />
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <button type="button" class="info-section-header" aria-expanded="false">
+          <span class="info-chevron">▸</span>Ferramentas
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <div class="btn-row">
+            <button type="button" class="btn btn-secundario" id="btn-screenshot">Captura</button>
+            <button type="button" class="btn btn-secundario" id="btn-png-alpha">PNG transparente</button>
+            <button type="button" class="btn btn-secundario" id="btn-gif-giro">Vídeo giro</button>
+            <button type="button" class="btn btn-secundario" id="btn-fullscreen">Tela cheia</button>
+            <button type="button" class="btn btn-secundario hidden" id="btn-ar">Ver em AR</button>
+            <button type="button" class="btn btn-secundario" id="btn-compartilhar">Compartilhar sessão</button>
+          </div>
+          <label class="select-linha">
+            <span>Tema da interface</span>
+            <select id="sel-tema">
+              <option value="escuro">Escuro</option>
+              <option value="claro">Claro</option>
+            </select>
+          </label>
+          <p class="atalhos">R reset · W wireframe · F tela cheia · S captura · ? atalhos</p>
+        </div>
+      </div>
+
+      <div class="info-section hidden expanded" id="painel-animacao">
+        <button type="button" class="info-section-header" aria-expanded="true">
+          <span class="info-chevron">▸</span>Animação GLTF
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <button type="button" class="btn btn-secundario" id="btn-animacao">Pausar animação</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <button type="button" class="info-section-header" aria-expanded="false">
+          <span class="info-chevron">▸</span>Recentes
+        </button>
+        <div class="info-section-body painel-opcoes-body">
+          <div class="lista-recentes" id="lista-recentes">
+            <p class="info-vazio">Nenhum recente</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-panel" id="info-panel">
+      <p class="info-vazio">Nenhum arquivo carregado</p>
+    </div>
+
+  </aside>
+
+  <main class="viewer">
+    <div id="canvas-container"></div>
+    <div class="viewer-controles">
+      <button type="button" class="btn-viewer" id="btn-reset" title="Resetar câmera (R)">Resetar câmera</button>
+    </div>
+    <div class="cores-modelo-wrap hidden" id="cores-modelo-wrap">
+      <p class="cores-modelo-titulo">Cores do modelo</p>
+      <div class="cores-modelo" id="cores-modelo"></div>
+      <p class="cores-modelo-contagem" id="cores-modelo-contagem"></p>
+      <p class="cores-modelo-vazio hidden" id="cores-modelo-vazio">Nenhuma cor detectada</p>
+    </div>
+    <div id="placeholder" class="placeholder">Selecione um modelo 3D para começar</div>
+    <p class="drop-hint">Gire · scroll zoom · Shift+arrastar move</p>
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Carregando...</p>
+    </div>
+    <div id="status" class="status">Pronto</div>
+  </main>
+  </div>
+
+  <script type="module" src="/src/pages/visualizador-avancado.js"></script>
+</body>
+</html>

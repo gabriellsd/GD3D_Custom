@@ -3,6 +3,7 @@ import { renderFooter } from './footer.js';
 import { renderOverlays } from './overlays.js';
 import { bindSiteSearch } from './search.js';
 import { bindCartUI } from '../cart/cart.js';
+import { bindAuthUI } from '../auth/client.js';
 
 /** Inicializa chrome do site (header, footer, carrinho, modal). */
 export function initShell({ page, title }) {
@@ -20,6 +21,7 @@ export function initShell({ page, title }) {
   }
 
   bindCartUI();
+  bindAuthUI();
   bindSiteSearch();
   bindNavPrefetch();
   syncHeaderOffset();

@@ -43,6 +43,21 @@ export function renderHeader(activePage) {
                 <nav class="hidden lg:flex items-center gap-6 shrink-0">${links}</nav>
                 ${renderSearchBar()}
                 <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <a href="/login.html" data-auth-login class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-slate-300 hover:text-white transition">
+                        <i class="fa-solid fa-user"></i> Entrar
+                    </a>
+                    <div data-auth-user class="hidden sm:flex items-center gap-2">
+                        <div class="hidden sm:block text-right leading-tight">
+                            <p data-auth-name class="text-xs font-semibold text-white max-w-[120px] truncate"></p>
+                            <p data-auth-role class="text-[10px] text-slate-500"></p>
+                        </div>
+                        <a href="/visualizador-avancado.html" data-auth-admin class="hidden p-2 text-brand-400 hover:text-brand-300 transition" title="Ferramentas admin">
+                            <i class="fa-solid fa-screwdriver-wrench"></i>
+                        </a>
+                        <button type="button" data-auth-logout class="p-2 text-slate-400 hover:text-white transition" title="Sair">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
                     <button type="button" data-cart-toggle class="relative p-2.5 text-slate-300 hover:text-brand-500 transition bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50">
                         <i class="fa-solid fa-cart-shopping text-lg"></i>
                         <span id="cart-count" class="absolute -top-1.5 -right-1.5 bg-brand-500 text-brand-900 text-xs font-bold w-5.5 h-5.5 flex items-center justify-center rounded-full border-2 border-[#080808]">0</span>

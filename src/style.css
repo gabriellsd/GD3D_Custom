@@ -143,8 +143,28 @@ body {
   @apply w-full h-full object-contain p-2 transition duration-300 group-hover:scale-105;
 }
 
-.store-card-3d-host {
-  @apply absolute inset-0 h-full w-full;
+.store-card-preview:has([data-card-3d]) .store-card-3d-host {
+  @apply absolute inset-0 h-full w-full hidden;
+}
+
+.store-card-preview.is-3d-active .store-card-photo--static {
+  @apply hidden;
+}
+
+.store-card-preview.is-3d-active .store-card-3d-host {
+  @apply block;
+}
+
+.store-card-3d-spin-btn {
+  @apply absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/90 bg-slate-900/90 text-slate-400 transition hover:border-brand-500/50 hover:text-brand-400;
+}
+
+.store-card-3d-spin-btn.is-active {
+  @apply border-brand-500/60 bg-brand-500/15 text-brand-400;
+}
+
+.store-card-preview.is-spinning .store-card-3d-spin-btn i {
+  animation: store-card-3d-spin 2s linear infinite;
 }
 
 .store-card-3d-host:not(.is-loaded)::after {

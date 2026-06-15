@@ -3,13 +3,13 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { resolveProductAssetUrl } from '../utils/asset-url.js';
 import { loadBambuPaint3mf } from '../viewer/bambu3mfLoader.js';
 import { buildCardPreviewFallbackHtml } from './gallery.js';
+import { escapeHtml } from './sizes.js';
 
 const CARD_SPIN_SPEED = 0.55;
 const BG = '#141414';
 
-/** Pose padrão dos cards (vista traseira 3/4, igual em todos). */
+/** Pose padrão dos cards — alinhada ao visualizador (vista frontal). */
 const CARD_3MF_ROTATION = { x: 0, y: 0, z: 0 };
-const CARD_3MF_FACING = Math.PI;
 const CARD_CAMERA = { yFactor: 0.35, distanceFactor: 2.1 };
 const CARD_SCALE = 2.4;
 const stlLoader = new STLLoader();
@@ -88,21 +88,12 @@ export function prefetchCardModels(products) {
 }
 
 function getCard3mfRotation(product) {
-  return product.card3mfRotation ?? CARD_3MF_ROTATION;
+  return product.card3mfRotation ?? product.model3mfRotation ?? CARD_3MF_ROTATION;
 }
 
 function getCard3mfFacing(product) {
   if (product.card3mfFacing != null) return product.card3mfFacing;
-  return CARD_3MF_FACING;
-}
-
-/** Normaliza eixo horizontal (cada 3MF vem com X/Z trocados). */
-function autoAlignCardYaw(content) {
-  content.updateMatrixWorld(true);
-  const size = new THREE.Box3().setFromObject(content).getSize(new THREE.Vector3());
-  if (size.z >= size.x) {
-    content.rotation.y += Math.PI / 2;
-  }
+  return product.model3mfFacing ?? product.modelFacing ?? 0;
 }
 
 function fitContent(object, product) {
@@ -123,8 +114,6 @@ function fitContent(object, product) {
   content.position.x -= center.x;
   content.position.z -= center.z;
   content.position.y -= fitted.min.y;
-
-  autoAlignCardYaw(content);
 
   const orient = new THREE.Group();
   orient.rotation.y = getCard3mfFacing(product);
@@ -174,7 +163,6 @@ function buildMeshFromStlGeometry(geometry, product) {
 
   const meshWrap = new THREE.Group();
   meshWrap.add(mesh);
-  autoAlignCardYaw(meshWrap);
 
   const orient = new THREE.Group();
   orient.rotation.y = getCard3mfFacing(product);
@@ -186,11 +174,11 @@ function buildMeshFromStlGeometry(geometry, product) {
 }
 
 class CardPreview3D {
-  constructor(host, product, { keepAnimating = false } = {}) {
+  constructor(host, product) {
     this.host = host;
     this.product = product;
-    this.keepAnimating = keepAnimating;
-    this.visible = keepAnimating;
+    this.visible = false;
+    this.spinEnabled = false;
     this.running = false;
     this.disposed = false;
     this.modelPivot = null;
@@ -243,34 +231,63 @@ class CardPreview3D {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    if (!this.spinEnabled) this.renderFrame();
+  }
+
+  renderFrame() {
+    if (this.disposed || !this.renderer || !this.modelPivot) return;
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  setSpinEnabled(enabled) {
+    if (this.disposed) return;
+    this.spinEnabled = Boolean(enabled);
+    this.host.classList.toggle('is-spinning', this.spinEnabled);
+
+    const preview = this.host.closest('.store-card-preview');
+    preview?.classList.toggle('is-spinning', this.spinEnabled);
+
+    const btn = preview?.querySelector('[data-card-3d-spin]');
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(this.spinEnabled));
+      btn.classList.toggle('is-active', this.spinEnabled);
+      btn.title = this.spinEnabled ? 'Voltar à foto' : 'Ver em 3D com rotação';
+    }
+
+    if (this.spinEnabled) {
+      if (this.modelPivot) this.modelPivot.rotation.y = 0;
+      if (this.visible) this.startLoop();
+    } else {
+      this.stopLoop();
+      this.renderFrame();
+    }
   }
 
   setVisible(visible) {
-    if (this.keepAnimating) {
-      this.visible = true;
-      this.startLoop();
+    this.visible = visible;
+    if (!visible) {
+      this.stopLoop();
       return;
     }
-    this.visible = visible;
-    if (visible) this.startLoop();
-    else this.stopLoop();
+    this.renderFrame();
+    if (this.spinEnabled) this.startLoop();
   }
 
-  shouldAnimate() {
-    return Boolean(this.modelPivot && this.renderer && (this.keepAnimating || this.visible));
+  shouldSpin() {
+    return Boolean(this.visible && this.spinEnabled && this.modelPivot && this.renderer);
   }
 
   startLoop() {
-    if (this.running || this.disposed) return;
+    if (this.running || this.disposed || !this.shouldSpin()) return;
     this.running = true;
     const tick = () => {
       if (!this.running || this.disposed) return;
       this.raf = requestAnimationFrame(tick);
-      if (!this.shouldAnimate()) return;
+      if (!this.shouldSpin()) return;
+      this.renderer.render(this.scene, this.camera);
       if (!this.reduceMotion) {
         this.modelPivot.rotation.y += CARD_SPIN_SPEED * 0.016;
       }
-      this.renderer.render(this.scene, this.camera);
     };
     tick();
   }
@@ -284,6 +301,7 @@ class CardPreview3D {
   showModel(pivot) {
     if (this.disposed) return;
     this.ensureRenderer();
+    pivot.rotation.set(0, 0, 0);
     this.modelPivot = pivot;
     this.scene.add(pivot);
 
@@ -299,8 +317,12 @@ class CardPreview3D {
     this.camera.lookAt(center);
 
     this.host.classList.add('is-loaded');
-    this.renderer.render(this.scene, this.camera);
-    this.startLoop();
+    this.renderFrame();
+    if (this.spinEnabled && this.visible) {
+      requestAnimationFrame(() => {
+        if (!this.disposed && this.spinEnabled && this.visible) this.startLoop();
+      });
+    }
   }
 
   load() {
@@ -380,79 +402,81 @@ export function productSupportsCard3d(product) {
   return productHasModel(product);
 }
 
-export function buildCard3dHostHtml() {
-  return '<div class="store-card-3d-host" data-card-3d></div>';
+export function buildCard3dPreviewHtml(product) {
+  const src = product.previewImage || product.previewImages?.[0];
+  const imgHtml = src
+    ? `<img src="${src}" alt="${escapeHtml(product.name)}" class="store-card-photo store-card-photo--static" loading="lazy" draggable="false" />`
+    : '';
+
+  return `${imgHtml}<div class="store-card-3d-host" data-card-3d></div>
+    <button type="button" class="store-card-3d-spin-btn" data-card-3d-spin aria-pressed="false" title="Ver em 3D com rotação">
+      <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+    </button>`;
 }
 
-function isPreviewVisible(previewEl) {
-  const rect = previewEl.getBoundingClientRect();
-  return (
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.bottom > -120 &&
-    rect.top < window.innerHeight + 120
-  );
-}
-
-function ensureCardPreview(host, product, keepAnimating = false) {
+function ensureCardPreview(host, product) {
   let instance = instances.get(host);
   if (!instance) {
-    instance = new CardPreview3D(host, product, { keepAnimating });
+    instance = new CardPreview3D(host, product);
     instances.set(host, instance);
   }
   instance.setVisible(true);
   return instance;
 }
 
-export function bindCardPreview3d(container, products, { eager = false } = {}) {
-  const byId = new Map(products.map((p) => [p.id, p]));
-  const hosts = container.querySelectorAll('[data-card-3d]');
-  if (!hosts.length) return;
-
-  prefetchCardModels(products);
-
-  if (eager) {
-    hosts.forEach((host) => {
-      const card = host.closest('[data-product-id]');
-      const product = byId.get(Number(card?.dataset.productId));
-      if (product) ensureCardPreview(host, product, true);
-    });
-    return () => {};
+function deactivateCard3d(preview, host) {
+  const instance = instances.get(host);
+  if (instance) {
+    instance.dispose();
+    instances.delete(host);
   }
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const host = entry.target.matches('[data-card-3d]')
-          ? entry.target
-          : entry.target.querySelector('[data-card-3d]');
-        if (!host) continue;
+  host.classList.remove('is-loaded', 'is-spinning');
+  host.replaceChildren();
 
-        const card = host.closest('[data-product-id]');
-        const product = byId.get(Number(card?.dataset.productId));
-        if (!product || !productHasModel(product)) continue;
+  preview.classList.remove('is-3d-active', 'is-spinning');
 
-        if (entry.isIntersecting) {
-          ensureCardPreview(host, product, false);
-        } else {
-          instances.get(host)?.setVisible(false);
-        }
-      }
-    },
-    { rootMargin: '160px', threshold: 0.01 }
-  );
+  const btn = preview.querySelector('[data-card-3d-spin]');
+  if (btn) {
+    btn.setAttribute('aria-pressed', 'false');
+    btn.classList.remove('is-active');
+    btn.title = 'Ver em 3D com rotação';
+  }
+}
 
-  hosts.forEach((host) => {
-    const preview = host.closest('.store-card-preview');
-    if (!preview) return;
-    observer.observe(preview);
+function bindCardSpinToggles(container, byId) {
+  const onSpinClick = (e) => {
+    const btn = e.target.closest('[data-card-3d-spin]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
 
-    const card = host.closest('[data-product-id]');
+    const preview = btn.closest('.store-card-preview');
+    const host = preview?.querySelector('[data-card-3d]');
+    if (!preview || !host) return;
+
+    const card = preview.closest('[data-product-id]');
     const product = byId.get(Number(card?.dataset.productId));
-    if (product && isPreviewVisible(preview)) {
-      ensureCardPreview(host, product, false);
-    }
-  });
+    if (!product) return;
 
-  return () => observer.disconnect();
+    if (preview.classList.contains('is-3d-active')) {
+      deactivateCard3d(preview, host);
+      return;
+    }
+
+    preview.classList.add('is-3d-active');
+    const instance = ensureCardPreview(host, product);
+    instance.setSpinEnabled(true);
+  };
+
+  container.addEventListener('click', onSpinClick);
+  return () => container.removeEventListener('click', onSpinClick);
+}
+
+export function bindCardPreview3d(container, products) {
+  const byId = new Map(products.map((p) => [p.id, p]));
+  if (!container.querySelector('[data-card-3d]')) return;
+
+  prefetchCardModels(products.filter(productHasModel));
+  return bindCardSpinToggles(container, byId);
 }

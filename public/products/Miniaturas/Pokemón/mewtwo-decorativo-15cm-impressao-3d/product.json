@@ -5,7 +5,9 @@
   "modelColor": "#f5c518",
   "modelRotation": { "x": -1.5707963267948966, "y": 0, "z": 0 },
   "modelFacing": 3.141592653589793,
-  "model3mfRotation": { "x": 0, "y": 0, "z": 0 },
+  "model3mfRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
   "model3mfFacing": 3.141592653589793,
+  "card3mfRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+  "card3mfFacing": 3.141592653589793,
   "colors": ["#e8a317", "#f59e0b", "#ffffff"]
 }

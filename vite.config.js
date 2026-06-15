@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
+import { authDevPlugin } from './scripts/vite-auth-plugin.mjs';
 import { runProductsSync } from './scripts/sync-products.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,10 +97,20 @@ function productsSyncPlugin() {
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), serveProductAssetsPlugin(), productsSyncPlugin()],
+  plugins: [tailwindcss(), authDevPlugin(), serveProductAssetsPlugin(), productsSyncPlugin()],
   server: {
     watch: {
       ignored: ['**/node_modules/**'],
+    },
+    proxy: {
+      '/api/proxy': {
+        target: 'http://127.0.0.1:8765',
+        changeOrigin: true,
+      },
+      '/api/converter-step': {
+        target: 'http://127.0.0.1:8765',
+        changeOrigin: true,
+      },
     },
   },
   build: {
@@ -108,9 +119,11 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         produtos: resolve(__dirname, 'produtos.html'),
         visualizador: resolve(__dirname, 'visualizador.html'),
+        visualizadorAvancado: resolve(__dirname, 'visualizador-avancado.html'),
         materiais: resolve(__dirname, 'materiais.html'),
         sobre: resolve(__dirname, 'sobre.html'),
         contato: resolve(__dirname, 'contato.html'),
+        login: resolve(__dirname, 'login.html'),
       },
     },
   },

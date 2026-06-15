@@ -7,5 +7,6 @@
   "modelFacing": 3.141592653589793,
   "model3mfRotation": { "x": 0, "y": 0, "z": 0 },
   "model3mfFacing": 3.141592653589793,
+  "card3mfFacing": 3.141592653589793,
   "colors": ["#e8a317", "#f59e0b", "#ffffff"]
 }

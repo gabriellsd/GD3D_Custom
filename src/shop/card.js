@@ -1,6 +1,6 @@
 import { formatBRL } from '../utils/format.js';
 import { buildCardPreviewFallbackHtml, buildCardPreviewImagesHtml } from './gallery.js';
-import { buildCard3dHostHtml, productSupportsCard3d } from './card-preview-3d.js';
+import { buildCard3dPreviewHtml, productSupportsCard3d } from './card-preview-3d.js';
 import { buildSizeOptionsHtml } from './sizes.js';
 
 const ICON_COLOR = '#e8a317';
@@ -21,7 +21,7 @@ export function buildStoreCardHtml(product, options = {}) {
   const previewHtml = staticPreview
     ? buildCardPreviewFallbackHtml(product) || buildCardPreviewImagesHtml(product)
     : productSupportsCard3d(product)
-      ? buildCard3dHostHtml()
+      ? buildCard3dPreviewHtml(product)
       : buildCardPreviewImagesHtml(product);
   const previewInner =
     previewHtml ??

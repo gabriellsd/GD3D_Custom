@@ -112,7 +112,7 @@ let disposeCard3d = null;
 function bindCardEvents(container, items) {
   disposeCard3d?.();
   bindCardGalleries(container, buildPreviewUrlsMap(items));
-  disposeCard3d = bindCardPreview3d(container, PRODUCTS, { eager: true }) ?? null;
+  disposeCard3d = bindCardPreview3d(container, PRODUCTS) ?? null;
 
   bindSizeOptions(container);
 

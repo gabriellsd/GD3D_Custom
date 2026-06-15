@@ -4,3 +4,7 @@ dist
 *.local
 .vite
 tmp-3mf-inspect/
+auth.users.json
+.env
+.env.*
+!.env.example

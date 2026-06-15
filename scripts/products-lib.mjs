@@ -96,7 +96,7 @@ function readProductTxt(dir) {
   let collectingSizes = false;
 
   const isKeyLine = (line) =>
-    /^(preco|preço|price|nome|titulo|título|name|descricao|descrição|desc|tamanho|tamanhos)\s*[:=]/i.test(
+    /^(preco|preço|price|nome|titulo|título|name|descricao|descrição|desc|tamanho|tamanhos|destaque|featured|destaque_ordem|featured_order|ordem_destaque)\s*[:=]/i.test(
       line
     ) || /^tamanhos\s*:$/i.test(line);
 
@@ -144,6 +144,25 @@ function readProductTxt(dir) {
       continue;
     }
 
+    const featuredMatch = line.match(/^(destaque|featured)\s*[:=]\s*(.+)$/i);
+    if (featuredMatch) {
+      collectingDesc = false;
+      collectingSizes = false;
+      const val = featuredMatch[2].trim().toLowerCase();
+      parsed.featured = ['sim', 's', 'yes', 'y', 'true', '1', 'on'].includes(val);
+      continue;
+    }
+
+    const featuredOrderMatch = line.match(
+      /^(destaque_ordem|featured_order|ordem_destaque)\s*[:=]\s*(\d+)$/i
+    );
+    if (featuredOrderMatch) {
+      collectingDesc = false;
+      collectingSizes = false;
+      parsed.featuredOrder = parseInt(featuredOrderMatch[2], 10);
+      continue;
+    }
+
     if (collectingSizes && !isKeyLine(line)) {
       sizeLines.push(line);
       continue;
@@ -180,7 +199,16 @@ function readProductTxt(dir) {
     parsed.sizes = [...new Set(parsed.sizes)];
   }
 
-  if (parsed.price != null || parsed.desc || parsed.nome || parsed.sizes?.length) return parsed;
+  if (
+    parsed.price != null ||
+    parsed.desc ||
+    parsed.nome ||
+    parsed.sizes?.length ||
+    parsed.featured != null ||
+    parsed.featuredOrder != null
+  ) {
+    return parsed;
+  }
 
   const simpleLines = lines.map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
   const price = parsePrice(simpleLines[0]);
@@ -287,6 +315,8 @@ function buildCatalogEntry({ category, subcategory, slug, productPath }) {
 
   const optionalKeys = [
     'sizes',
+    'featured',
+    'featuredOrder',
     'modelColor',
     'modelRotation',
     'modelFacing',

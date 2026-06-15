@@ -37,5 +37,14 @@ export function renderHomeFeatured() {
     return;
   }
 
-  grid.innerHTML = PRODUCTS.map((p) => buildFeaturedCard(p)).join('');
+  const flagged = PRODUCTS.filter((p) => p.featured);
+  const items = (
+    flagged.length
+      ? [...flagged].sort(
+          (a, b) => (a.featuredOrder ?? 999) - (b.featuredOrder ?? 999) || a.id - b.id
+        )
+      : PRODUCTS
+  ).slice(0, 8);
+
+  grid.innerHTML = items.map((p) => buildFeaturedCard(p)).join('');
 }

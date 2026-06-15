@@ -1,0 +1,14 @@
+[
+  {
+    "email": "admin@gd3d.local",
+    "password": "admin123",
+    "role": "admin",
+    "name": "Administrador GD3D"
+  },
+  {
+    "email": "cliente@example.com",
+    "password": "cliente123",
+    "role": "client",
+    "name": "Cliente Exemplo"
+  }
+]
