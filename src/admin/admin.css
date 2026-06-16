@@ -1,0 +1,135 @@
+/* Painel admin — GD3D Creative */
+
+.admin-shell {
+  --admin-sidebar: 320px;
+}
+
+.admin-stat {
+  @apply rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3;
+}
+
+.admin-stat-value {
+  @apply text-2xl font-extrabold text-white tabular-nums;
+}
+
+.admin-stat-label {
+  @apply text-[11px] font-semibold uppercase tracking-wider text-slate-500 mt-0.5;
+}
+
+.admin-sidebar {
+  @apply flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 lg:sticky lg:top-[calc(var(--header-offset,5rem)+1rem)] lg:max-h-[calc(100vh-var(--header-offset,5rem)-2rem)];
+}
+
+.admin-search {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-brand-500 focus:outline-none;
+}
+
+.admin-product-item {
+  @apply w-full flex gap-3 items-center rounded-xl border border-transparent px-2 py-2 text-left transition hover:bg-slate-800/80;
+}
+
+.admin-product-item.is-active {
+  @apply border-brand-500/40 bg-brand-500/10;
+}
+
+.admin-product-thumb {
+  @apply h-12 w-12 shrink-0 rounded-lg border border-slate-700 bg-slate-950 object-cover;
+}
+
+.admin-product-thumb--empty {
+  @apply flex items-center justify-center text-slate-600 text-lg;
+}
+
+.admin-badge {
+  @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide;
+}
+
+.admin-badge--live {
+  @apply bg-emerald-500/15 text-emerald-400 border border-emerald-800/50;
+}
+
+.admin-badge--draft {
+  @apply bg-slate-700/50 text-slate-400 border border-slate-600/50;
+}
+
+.admin-badge--featured {
+  @apply bg-brand-500/15 text-brand-400 border border-brand-700/40;
+}
+
+.admin-panel {
+  @apply rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden;
+}
+
+.admin-panel-header {
+  @apply flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 px-6 py-5;
+}
+
+.admin-tabs {
+  @apply flex gap-1 border-b border-slate-800 px-4 sm:px-6 overflow-x-auto;
+}
+
+.admin-tab {
+  @apply shrink-0 px-4 py-3 text-sm font-semibold text-slate-500 border-b-2 border-transparent transition hover:text-slate-300;
+}
+
+.admin-tab.is-active {
+  @apply text-brand-400 border-brand-500;
+}
+
+.admin-tab-panel {
+  @apply hidden;
+}
+
+.admin-tab-panel.is-active {
+  @apply block p-6 sm:p-8;
+}
+
+.admin-field label {
+  @apply block text-xs font-medium text-slate-400 mb-1.5;
+}
+
+.admin-field input,
+.admin-field textarea,
+.admin-field select {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white text-sm focus:border-brand-500 focus:outline-none;
+}
+
+.admin-drop {
+  @apply relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 bg-slate-950/50 px-4 py-6 text-center transition hover:border-brand-500/50 hover:bg-slate-900/80 cursor-pointer;
+}
+
+.admin-drop.has-file {
+  @apply border-brand-500/40 bg-brand-500/5;
+}
+
+.admin-drop input[type="file"] {
+  @apply absolute inset-0 opacity-0 cursor-pointer;
+}
+
+.admin-file-card {
+  @apply flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3;
+}
+
+.admin-preview-hero {
+  @apply aspect-square max-w-[200px] rounded-2xl border border-slate-700 bg-slate-950 object-cover;
+}
+
+.admin-toast {
+  @apply fixed bottom-6 right-6 z-[80] max-w-sm rounded-xl border px-4 py-3 text-sm font-medium shadow-xl transition translate-y-0 opacity-100;
+}
+
+.admin-toast--ok {
+  @apply border-emerald-800/60 bg-emerald-950/95 text-emerald-200;
+}
+
+.admin-toast--err {
+  @apply border-red-900/60 bg-red-950/95 text-red-200;
+}
+
+.admin-toast.is-hidden {
+  @apply translate-y-4 opacity-0 pointer-events-none;
+}
+
+.admin-saving {
+  @apply opacity-60 pointer-events-none;
+}

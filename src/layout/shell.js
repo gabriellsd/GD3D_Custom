@@ -4,15 +4,17 @@ import { renderOverlays } from './overlays.js';
 import { bindSiteSearch } from './search.js';
 import { bindCartUI } from '../cart/cart.js';
 import { bindAuthUI } from '../auth/client.js';
+import { initProductCatalog } from '../data/products.js';
 
 /** Inicializa chrome do site (header, footer, carrinho, modal). */
-export function initShell({ page, title }) {
+export async function initShell({ page, title }) {
   document.title = title;
   document.body.classList.add('site-bg');
 
+  const hideChromeActions = page === 'viewer-advanced';
   const chrome = document.getElementById('site-chrome');
   if (chrome) {
-    chrome.innerHTML = renderHeader(page) + renderOverlays();
+    chrome.innerHTML = renderHeader(page, { hideChromeActions }) + renderOverlays();
   }
 
   const footerSlot = document.getElementById('site-footer');
@@ -20,6 +22,7 @@ export function initShell({ page, title }) {
     footerSlot.innerHTML = renderFooter();
   }
 
+  await initProductCatalog();
   bindCartUI();
   bindAuthUI();
   bindSiteSearch();

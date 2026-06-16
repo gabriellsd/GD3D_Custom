@@ -1,5 +1,5 @@
 ﻿/**
- * Visualizador G-code simplificado (extrusÃµes G1 com E).
+ * Visualizador G-code simplificado (extrusões G1 com E).
  */
 import * as THREE from "three";
 
@@ -51,7 +51,7 @@ export function carregarGcode(buffer) {
   );
   const { camadas, zOrdenado } = parseGcode(texto);
 
-  if (!zOrdenado.length) throw new Error("G-code sem extrusÃµes detectadas");
+  if (!zOrdenado.length) throw new Error("G-code sem extrusões detectadas");
 
   const grupo = new THREE.Group();
   grupo.name = "gcode-view";

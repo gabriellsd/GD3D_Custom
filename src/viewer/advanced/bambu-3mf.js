@@ -1,10 +1,15 @@
-﻿/**
+/**
  * Loader 3MF Bambu/Orca (paint_color + filament_colour).
- * Baseado no GD3D Creative â€” suporta multicolor AMS.
+ * Baseado no GD3D Creative — suporta multicolor AMS.
  */
 import * as THREE from "three";
 import * as fflate from "three/addons/libs/fflate.module.js";
 import { extrairMetadadosBambu } from "./bambu-metadados.js";
+import {
+  extractInnerObjectXml,
+  parseObjectModelPath,
+  resolverMontagem,
+} from "../bambu3mfParse.js";
 
 const SLOT_CODES = [
   "4", "8", "0C", "1C", "2C", "3C", "4C", "5C", "6C", "7C",
@@ -125,35 +130,6 @@ function parseDefaultExtruder(modelSettings) {
   return match ? parseInt(match[1], 10) : 1;
 }
 
-function parseAssemblyComponents(mainModelXml) {
-  const componentes = [];
-  const re = /<component[^>]*\/>/gi;
-  let match;
-
-  while ((match = re.exec(mainModelXml)) !== null) {
-    const tag = match[0];
-    const pathAttr =
-      tag.match(/p:path="([^"]*)"/i)?.[1] ?? tag.match(/\spath="([^"]*)"/i)?.[1];
-    const objectId = parseInt(tag.match(/objectid="(\d+)"/i)?.[1] ?? "0", 10);
-    const transform = tag.match(/transform="([^"]*)"/i)?.[1];
-
-    if (!pathAttr || !objectId) continue;
-
-    componentes.push({
-      path: pathAttr.replace(/^\//, ""),
-      objectId,
-      transform: transform ? transform.trim().split(/\s+/).map(Number) : null,
-    });
-  }
-
-  return componentes;
-}
-
-function extractInnerObjectXml(objectFileXml, objectId) {
-  const re = new RegExp(`<object\\s+id="${objectId}"[\\s\\S]*?<\\/object>`, "i");
-  return objectFileXml.match(re)?.[0] ?? null;
-}
-
 function parsePartExtruders(modelSettings) {
   const mapa = new Map();
   if (!modelSettings) return mapa;
@@ -213,12 +189,6 @@ function isSupportPartMeta(meta, innerObjectXml) {
   return false;
 }
 
-function parseObjectModelPath(mainModelXml) {
-  const match = mainModelXml.match(/p:path="([^"]+\.model)"/i);
-  if (!match) return "3D/Objects/object_1.model";
-  return match[1].replace(/^\//, "");
-}
-
 function parseVertices(verticesXml) {
   const coords = [];
   let match;
@@ -257,7 +227,7 @@ function buildColoredGroup(objectXml, filamentColours, defaultExtruder) {
   const trianglesPart = objectXml.match(/<triangles>[\s\S]*?<\/triangles>/);
 
   if (!verticesPart || !trianglesPart) {
-    throw new Error("3MF Bambu: mesh invÃ¡lido");
+    throw new Error("3MF Bambu: mesh inválido");
   }
 
   const vertices = parseVertices(verticesPart[0]);
@@ -323,8 +293,10 @@ function buildAssemblyGroup(
   const root = new THREE.Group();
   const cache = new Map();
   let suportes = 0;
+  let indicePeca = 0;
 
   for (const component of components) {
+    indicePeca += 1;
     let objectFileXml = cache.get(component.path);
     if (!objectFileXml) {
       objectFileXml = lerTextoZip(arquivos, component.path);
@@ -332,7 +304,8 @@ function buildAssemblyGroup(
       cache.set(component.path, objectFileXml);
     }
 
-    const innerXml = extractInnerObjectXml(objectFileXml, component.objectId);
+    const innerXml =
+      component.innerXml || extractInnerObjectXml(objectFileXml, component.objectId);
     if (!innerXml) continue;
 
     const meta = partMetadata.get(component.objectId);
@@ -341,8 +314,12 @@ function buildAssemblyGroup(
     const extruder =
       partExtruders.get(component.objectId) ?? meta?.extruder ?? defaultExtruder;
     const part = buildColoredGroup(innerXml, filamentColours, extruder);
+    const nomePeca = meta?.name?.trim();
+    part.name = nomePeca || `Peça ${indicePeca}`;
+    part.userData.bambuObjectId = component.objectId;
 
     if (component.transform) {
+      part.userData.bambuTransform = component.transform;
       part.applyMatrix4(matrixFrom3mfTransform(component.transform));
     }
 
@@ -355,7 +332,7 @@ function buildAssemblyGroup(
   }
 
   if (!root.children.length) {
-    throw new Error("3MF Bambu: montagem multi-peÃ§a vazia");
+    throw new Error("3MF Bambu: montagem multi-peça vazia");
   }
 
   root.userData.suportesBambu = suportes;
@@ -381,7 +358,7 @@ export function detectarBambu3mf(arrayBuffer) {
   return false;
 }
 
-export function parseBambu3mfBuffer(buffer) {
+export function parseBambu3mfBuffer(buffer, options = {}) {
   const arquivos = normalizarZip(
     fflate.unzipSync(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer))
   );
@@ -398,22 +375,27 @@ export function parseBambu3mfBuffer(buffer) {
   const objectXml = lerTextoZip(arquivos, objectPath);
   if (!objectXml) throw new Error(`3MF Bambu: ${objectPath} em falta`);
 
-  const components = parseAssemblyComponents(mainModel);
+  const components = resolverMontagem(mainModel, objectPath, objectXml, arquivos, options);
 
   let object;
-  if (components.length <= 1 || objectXmlHasPaintColor(objectXml)) {
-    object = buildColoredGroup(objectXml, filamentColours, defaultExtruder);
-  } else {
+  if (components.length > 0) {
     const partExtruders = parsePartExtruders(modelSettings);
     const partMetadata = parsePartMetadata(modelSettings);
-    object = buildAssemblyGroup(
-      components,
-      arquivos,
-      filamentColours,
-      partExtruders,
-      partMetadata,
-      defaultExtruder
-    );
+    try {
+      object = buildAssemblyGroup(
+        components,
+        arquivos,
+        filamentColours,
+        partExtruders,
+        partMetadata,
+        defaultExtruder
+      );
+    } catch (err) {
+      if (!/vazia/i.test(err?.message || "")) throw err;
+      object = buildColoredGroup(objectXml, filamentColours, defaultExtruder);
+    }
+  } else {
+    object = buildColoredGroup(objectXml, filamentColours, defaultExtruder);
   }
 
   return {

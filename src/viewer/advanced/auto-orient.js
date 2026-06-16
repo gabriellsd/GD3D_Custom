@@ -1,5 +1,5 @@
 ﻿/**
- * Auto-orientaÃ§Ã£o para impressÃ£o (maximiza contato com a mesa).
+ * Auto-orientação para impressão (maximiza contato com a mesa).
  */
 import * as THREE from "three";
 

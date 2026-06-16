@@ -1,7 +1,33 @@
-﻿/**
- * ExportaÃ§Ã£o PNG (fundo transparente) e vÃ­deo de giro (WebM).
+/**
+ * Exportação PNG (fundo transparente) e vídeo de giro (WebM).
  */
 import * as THREE from "three";
+
+export function capturarPngBlob(renderer, scene, camera, { transparent = false } = {}) {
+  const prevAlpha = renderer.getClearAlpha();
+  const prevCor = renderer.getClearColor(new THREE.Color());
+  const prevFundo = scene.background;
+
+  if (transparent) {
+    renderer.setClearColor(0x000000, 0);
+    scene.background = null;
+  }
+  renderer.render(scene, camera);
+
+  return new Promise((resolve, reject) => {
+    renderer.domElement.toBlob(
+      (blob) => {
+        renderer.setClearColor(prevCor, prevAlpha);
+        scene.background = prevFundo;
+        renderer.render(scene, camera);
+        if (blob) resolve(blob);
+        else reject(new Error('Não foi possível gerar a imagem'));
+      },
+      'image/png',
+      0.92
+    );
+  });
+}
 
 export function capturarPngTransparente(renderer, scene, camera) {
   const prevAlpha = renderer.getClearAlpha();
@@ -27,7 +53,7 @@ export function capturarPngTransparente(renderer, scene, camera) {
 export async function exportarGifGiro({ renderer, scene, camera, modelPivot, frames = 48, onProgress }) {
   const canvas = renderer.domElement;
   if (!canvas.captureStream) {
-    throw new Error("Captura de vÃ­deo nÃ£o suportada neste navegador");
+    throw new Error("Captura de vídeo não suportada neste navegador");
   }
 
   const qOriginal = modelPivot.quaternion.clone();

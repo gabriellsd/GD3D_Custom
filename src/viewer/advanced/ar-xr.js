@@ -1,5 +1,5 @@
-﻿/**
- * VisualizaÃ§Ã£o AR via WebXR (quando suportado).
+/**
+ * Visualização AR via WebXR (quando suportado).
  */
 import * as THREE from "three";
 
@@ -14,7 +14,7 @@ export async function suportaAr() {
 
 export async function iniciarAr({ renderer, scene, modelPivot, onStatus }) {
   if (!(await suportaAr())) {
-    throw new Error("AR nÃ£o suportado neste dispositivo/navegador");
+    throw new Error("AR não suportado neste dispositivo/navegador");
   }
 
   const session = await navigator.xr.requestSession("immersive-ar", {
@@ -50,7 +50,7 @@ export async function iniciarAr({ renderer, scene, modelPivot, onStatus }) {
       }
     });
     renderer.xr.enabled = false;
-    onStatus?.("SessÃ£o AR encerrada");
+    onStatus?.("Sessão AR encerrada");
   });
 
   renderer.setAnimationLoop((time, frame) => {
@@ -65,7 +65,7 @@ export async function iniciarAr({ renderer, scene, modelPivot, onStatus }) {
           clone.matrix.decompose(clone.position, clone.quaternion, clone.scale);
           clone.visible = true;
           posicionado.value = true;
-          onStatus?.("Modelo posicionado â€” mova o dispositivo");
+          onStatus?.("Modelo posicionado — mova o dispositivo");
         }
       }
     }
@@ -73,6 +73,6 @@ export async function iniciarAr({ renderer, scene, modelPivot, onStatus }) {
     renderer.render(scene, renderer.xr.getCamera());
   });
 
-  onStatus?.("AR ativo â€” aponte para uma superfÃ­cie plana");
+  onStatus?.("AR ativo — aponte para uma superfície plana");
   return session;
 }

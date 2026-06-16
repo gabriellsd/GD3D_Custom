@@ -1,7 +1,7 @@
 import { verifySessionToken, parseCookieHeader, COOKIE_NAME } from './lib/auth-token.mjs';
 
 export const config = {
-  matcher: ['/visualizador-avancado', '/visualizador-avancado.html'],
+  matcher: ['/visualizador-avancado', '/visualizador-avancado.html', '/admin', '/admin.html'],
 };
 
 export default async function middleware(request) {

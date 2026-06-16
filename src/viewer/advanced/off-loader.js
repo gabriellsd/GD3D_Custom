@@ -1,5 +1,5 @@
 ﻿/**
- * Loader OFF simples (Three.js nÃ£o inclui OFFLoader nas versÃµes atuais).
+ * Loader OFF simples (Three.js não inclui OFFLoader nas versões atuais).
  */
 import * as THREE from "three";
 
@@ -60,7 +60,7 @@ export class OFFLoader {
       return geometria;
     }
 
-    throw new Error("Arquivo OFF invÃ¡lido ou vazio");
+    throw new Error("Arquivo OFF inválido ou vazio");
   }
 
   async loadAsync(url) {

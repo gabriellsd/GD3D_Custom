@@ -1,5 +1,5 @@
-﻿/**
- * Modo comparaÃ§Ã£o: segundo modelo sobreposto ou lado a lado.
+/**
+ * Modo comparação: segundo modelo sobreposto ou lado a lado.
  */
 import * as THREE from "three";
 
@@ -59,21 +59,28 @@ export function criarComparacao(modelPivot, scene) {
     });
   }
 
+  function reposicionarGrupo(tipo) {
+    if (!grupo) return;
+    grupo.position.set(0, 0, 0);
+    if (tipo === "ghost") {
+      aplicarOpacidade(grupo, opacidade);
+      return;
+    }
+    if (tipo === "lado") {
+      restaurarOpacidade(grupo);
+      const box = new THREE.Box3().setFromObject(modelPivot);
+      const size = box.getSize(new THREE.Vector3());
+      grupo.position.x = size.x * 1.15;
+    }
+  }
+
   function definirModelo(object, tipo = "ghost") {
     limpar();
     if (!object) return;
     modo = tipo;
     grupo = object.clone(true);
     scene.add(grupo);
-
-    if (tipo === "ghost") {
-      aplicarOpacidade(grupo, opacidade);
-      grupo.position.set(0, 0, 0);
-    } else if (tipo === "lado") {
-      const box = new THREE.Box3().setFromObject(modelPivot);
-      const size = box.getSize(new THREE.Vector3());
-      grupo.position.x = size.x * 1.15;
-    }
+    reposicionarGrupo(tipo);
   }
 
   return {
@@ -81,6 +88,8 @@ export function criarComparacao(modelPivot, scene) {
     limpar,
     setModo(m) {
       modo = m;
+      if (!grupo) return;
+      reposicionarGrupo(m);
     },
     setOpacidade(a) {
       opacidade = a;

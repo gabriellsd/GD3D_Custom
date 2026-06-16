@@ -16,7 +16,7 @@ function bindSupabaseAuthListener() {
 
 async function syncSupabaseCookie(accessToken) {
   if (!accessToken) return;
-  await fetch('/api/auth/supabase-sync', {
+  const res = await fetch('/api/auth/supabase-sync', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -25,6 +25,10 @@ async function syncSupabaseCookie(accessToken) {
     credentials: 'include',
     body: JSON.stringify({ access_token: accessToken }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Não foi possível sincronizar a sessão com o servidor.');
+  }
 }
 
 async function fetchSessionLocal() {
@@ -42,7 +46,11 @@ async function fetchSessionSupabase() {
 
   const user = mapSupabaseUser(data.session.user);
   if (user) {
-    await syncSupabaseCookie(data.session.access_token).catch(() => {});
+    try {
+      await syncSupabaseCookie(data.session.access_token);
+    } catch {
+      // Sessão Supabase válida no browser; cookie será tentado de novo no próximo pedido.
+    }
   }
   return user;
 }
@@ -128,6 +136,33 @@ export async function login(email, password, options = {}) {
   return user;
 }
 
+export async function signUp(email, password, { name } = {}) {
+  if (!isSupabaseAuth()) {
+    throw new Error('Criar conta está disponível apenas quando o Supabase está configurado.');
+  }
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { name: name?.trim() || undefined },
+      emailRedirectTo: `${window.location.origin}/login.html`,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+
+  if (data.session?.access_token) {
+    await syncSupabaseCookie(data.session.access_token);
+    clearSessionCache();
+    cachedSession = mapSupabaseUser(data.session.user);
+    return { user: cachedSession, needsEmailConfirmation: false };
+  }
+
+  return { user: null, needsEmailConfirmation: true };
+}
+
 export async function logout() {
   if (isSupabaseAuth()) {
     await getSupabase()?.auth.signOut();
@@ -164,16 +199,24 @@ export function bindAuthUI() {
 
   if (!loginLink && !userWrap) return;
 
+  const setLoginVisible = (visible) => {
+    if (!loginLink) return;
+    loginLink.classList.toggle('hidden', !visible);
+    loginLink.classList.toggle('inline-flex', visible);
+  };
+
   const renderUser = (user) => {
     if (user) {
-      loginLink?.classList.add('hidden');
+      setLoginVisible(false);
       userWrap?.classList.remove('hidden');
+      userWrap?.classList.add('flex');
       if (userName) userName.textContent = user.name || user.email;
       if (userRole) userRole.textContent = roleLabel(user.role);
       adminLink?.classList.toggle('hidden', user.role !== 'admin');
     } else {
-      loginLink?.classList.remove('hidden');
+      setLoginVisible(true);
       userWrap?.classList.add('hidden');
+      userWrap?.classList.remove('flex');
       adminLink?.classList.add('hidden');
     }
   };

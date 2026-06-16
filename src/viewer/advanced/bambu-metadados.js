@@ -1,5 +1,5 @@
-﻿/**
- * Metadados extras de impressÃ£o Bambu (project_settings).
+/**
+ * Metadados extras de impressão Bambu (project_settings).
  */
 
 function parseCampoNumerico(texto, campo) {
@@ -50,9 +50,9 @@ export function secaoMetadadosBambu(meta) {
   if (meta.brim) itens.push(["Brim", meta.brim]);
   if (meta.suporteAtivo) itens.push(["Suportes", meta.suporteAtivo]);
   if (meta.temperaturasBico?.length) {
-    itens.push(["Temp. bico", `${meta.temperaturasBico[0]}Â°C`]);
+    itens.push(["Temp. bico", `${meta.temperaturasBico[0]}°C`]);
   }
 
   if (!itens.length) return null;
-  return { titulo: "ImpressÃ£o Bambu", itens };
+  return { titulo: "Impressão Bambu", itens };
 }

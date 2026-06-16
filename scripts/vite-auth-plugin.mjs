@@ -1,3 +1,6 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { loadEnv } from 'vite';
 import {
   authenticate,
   clearSessionCookie,
@@ -7,6 +10,12 @@ import {
   verifySessionToken,
 } from '../lib/auth.mjs';
 import { verifySupabaseAccessToken, isSupabaseServerConfigured } from '../lib/supabase-jwt.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function loadProjectEnv(mode = 'development') {
+  Object.assign(process.env, loadEnv(mode, ROOT, ''));
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -24,13 +33,17 @@ function sendJson(res, status, data, headers = {}) {
   res.end(JSON.stringify(data));
 }
 
-const ADMIN_PATHS = new Set(['/visualizador-avancado.html', '/visualizador-avancado']);
+const ADMIN_PATHS = new Set(['/visualizador-avancado.html', '/visualizador-avancado', '/admin.html', '/admin']);
 
 /** Em dev (Vite), serve /api/auth/* e protege rotas admin. */
 export function authDevPlugin() {
   return {
     name: 'gd3d-auth-dev',
+    config(_, { mode }) {
+      loadProjectEnv(mode);
+    },
     configureServer(server) {
+      loadProjectEnv(server.config.mode);
       server.middlewares.use(async (req, res, next) => {
         const rawUrl = req.url ?? '';
         const url = rawUrl.split('?')[0] ?? '';

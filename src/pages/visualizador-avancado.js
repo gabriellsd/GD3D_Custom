@@ -1,5 +1,6 @@
-﻿import { initGd3dProduto } from "../viewer/advanced/gd3d-produto.js";
-import { logout } from "../auth/client.js";
+﻿import { initShell } from '../layout/shell.js';
+import { requireRole } from '../auth/client.js';
+import { initGd3dProduto } from "../viewer/advanced/gd3d-produto.js";
 import * as THREE from "three";
     import { STLLoader } from "three/addons/loaders/STLLoader.js";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
@@ -10,20 +11,30 @@ import * as THREE from "three";
     import { carregar3mf } from "../viewer/advanced/loader-3mf.js";
     import { initFerramentas } from "../viewer/advanced/ferramentas.js";
     import { initExtensoes } from "../viewer/advanced/extensoes.js";
+    import { montarControlesViewport } from "../viewer/advanced/controles-viewport.js";
+    import { initPublicarProduto } from "../viewer/advanced/publicar-produto.js";
+    import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
+    import { alinharBaseNaMesa, centralizarNaMesa, marcarPosicaoBaseMesa } from "../viewer/advanced/posicionar-na-mesa.js";
+
+(async () => {
+    await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
+    const user = await requireRole('admin');
+    if (!user) return;
+    document.body.classList.add('viewer-advanced-active');
 
     const container = document.getElementById("canvas-container");
     const placeholder = document.getElementById("placeholder");
     const statusEl = document.getElementById("status");
     const infoPanel = document.getElementById("info-panel");
 
-    const backgrounds = [0x1e1e2e, 0x11111b, 0xffffff, 0x2d2d2d];
+    const backgrounds = [0x080808, 0x141414, 0xffffff, 0x2d2d2d];
     let bgIndex = 0;
     let wireframe = false;
     let usarCores = true;
     let currentModel = null;
     const materiaisOriginais = new Map();
     const meshComCorVertice = new Set();
-    const COR_PADRAO = 0x89b4fa;
+    const COR_PADRAO = 0xe8a317;
     let cameraDistance = 5;
 
     const ZOOM_FACTOR = 1.08;
@@ -112,7 +123,16 @@ import * as THREE from "three";
 
     function criarContainerModelo(object, ext) {
       const orientacao = new THREE.Group();
-      if (ext === "stl" || ext === "ply" || ext === "gcode" || ext === "gco" || ext === "g") {
+      const extNorm = (ext || "").toLowerCase();
+      if (
+        extNorm === "stl" ||
+        extNorm === "ply" ||
+        extNorm === "3mf" ||
+        extNorm === "mf3" ||
+        extNorm === "gcode" ||
+        extNorm === "gco" ||
+        extNorm === "g"
+      ) {
         orientacao.rotation.x = -Math.PI / 2;
       }
       orientacao.add(object);
@@ -127,6 +147,9 @@ import * as THREE from "three";
     let ferramentas = null;
     let extensoes = null;
     let ultimoFormato = "STL";
+    let ultimoArquivoFile = null;
+    let ultimoArquivosImportados = null;
+    let publicarProduto = null;
     let secaoFilamentosCache = null;
     let secaoExtensoesCache = null;
     let fbxUrlsAtivas = [];
@@ -197,12 +220,16 @@ import * as THREE from "three";
     function resize() {
       const w = container.clientWidth;
       const h = container.clientHeight;
+      if (w < 1 || h < 1) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
       ferramentas?.sincronizarCameras();
     }
     window.addEventListener("resize", resize);
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(() => resize()).observe(container);
+    }
     resize();
 
     const relogio = new THREE.Clock();
@@ -241,6 +268,9 @@ import * as THREE from "three";
         secaoExtensoesCache = null;
         revogarUrlsFbx(fbxUrlsAtivas);
         fbxUrlsAtivas = [];
+        ultimoArquivoFile = null;
+        ultimoArquivosImportados = null;
+        publicarProduto?.onModelCleared();
       }
     }
 
@@ -259,6 +289,10 @@ import * as THREE from "three";
       return valor * fator;
     }
 
+    function mmParaCena(mm) {
+      return unidadeOrigemArquivo(ultimoFormato) === "m" ? mm * 0.001 : mm;
+    }
+
     function formatarDistancia(metros) {
       const medidas = escolherUnidadeExibicao(metros);
       return formatarMedida(metros, medidas);
@@ -274,11 +308,30 @@ import * as THREE from "three";
       return secoes;
     }
 
-    function centerAndFrame(object) {
+    function mesaAtiva() {
+      return (
+        document.getElementById("chk-mesa")?.checked ||
+        document.getElementById("chk-mesa-overlay")?.checked
+      );
+    }
+
+    function deveAlinharNaMesa(opcoes = {}) {
+      if (opcoes.naMesa != null) return opcoes.naMesa;
+      return mesaAtiva() || ultimoFormato === "3MF" || Boolean(ultimoExtras?.bambu);
+    }
+
+    function centerAndFrame(object, opcoes = {}) {
+      object.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(object);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      object.position.sub(center);
+      const naMesa = deveAlinharNaMesa(opcoes);
+
+      if (naMesa) {
+        centralizarNaMesa(object);
+      } else {
+        object.position.sub(center);
+      }
 
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
       cameraDistance = maxDim * 2.5;
@@ -356,16 +409,16 @@ import * as THREE from "three";
 
     function formatarArea(areaMetrosQuadrados, unidade) {
       if (unidade === "m") {
-        return `${formatarNumero(areaMetrosQuadrados, 4)} mÂ²`;
+        return `${formatarNumero(areaMetrosQuadrados, 4)} m²`;
       }
-      return `${formatarNumero(areaMetrosQuadrados * 10000, 2)} cmÂ²`;
+      return `${formatarNumero(areaMetrosQuadrados * 10000, 2)} cm²`;
     }
 
     function formatarVolume(volumeMetrosCubicos, unidade) {
       if (unidade === "m") {
-        return `${formatarNumero(volumeMetrosCubicos, 6)} mÂ³`;
+        return `${formatarNumero(volumeMetrosCubicos, 6)} m³`;
       }
-      return `${formatarNumero(volumeMetrosCubicos * 1000000, 2)} cmÂ³`;
+      return `${formatarNumero(volumeMetrosCubicos * 1000000, 2)} cm³`;
     }
 
     function converterMedidas(geo, formato) {
@@ -518,9 +571,9 @@ import * as THREE from "three";
       const inicio = trecho.trim().toLowerCase();
       if (inicio.startsWith("solid")) {
         const amostra = await arquivo.slice(0, 512).text();
-        return amostra.includes("facet normal") ? "ASCII" : "BinÃ¡rio";
+        return amostra.includes("facet normal") ? "ASCII" : "Binário";
       }
-      return "BinÃ¡rio";
+      return "Binário";
     }
 
     async function lerMetadadosArquivo(arquivo, extensao) {
@@ -529,7 +582,7 @@ import * as THREE from "three";
         formato: extensao.toUpperCase(),
         tamanho: formatarTamanho(arquivo.size),
         tamanhoBytes: arquivo.size,
-        mime: arquivo.type || "â€”",
+        mime: arquivo.type || "—",
         modificado: formatarData(arquivo.lastModified),
       };
 
@@ -554,15 +607,71 @@ import * as THREE from "three";
       return metadados;
     }
 
+    function nomeBaseArquivo(arquivo) {
+      return arquivo.name.replace(/\.[^.]+$/, "");
+    }
+
+    async function lerMetadadosVariosStl(arquivos) {
+      const nomes = arquivos.map((a) => a.name);
+      const totalBytes = arquivos.reduce((s, f) => s + f.size, 0);
+      const tipos = await Promise.all(arquivos.map((a) => detectarTipoStl(a)));
+      const ascii = tipos.filter((t) => t === "ASCII").length;
+      const binario = tipos.filter((t) => t === "Binário").length;
+
+      return {
+        nome:
+          nomes.length <= 2
+            ? nomes.join(" + ")
+            : `${nomes.length} ficheiros STL`,
+        formato: "STL",
+        tamanho: formatarTamanho(totalBytes),
+        tamanhoBytes: totalBytes,
+        mime: "model/stl",
+        modificado: formatarData(Math.max(...arquivos.map((f) => f.lastModified))),
+        ficheiros: nomes,
+        pecas: nomes.length,
+        tipoStl:
+          ascii && binario
+            ? `${ascii} ASCII, ${binario} binário`
+            : ascii
+              ? "ASCII"
+              : "Binário",
+      };
+    }
+
+    async function carregarStlComoPeca(arquivo) {
+      const url = URL.createObjectURL(arquivo);
+      try {
+        const geom = await new STLLoader().loadAsync(url);
+        const mesh = new THREE.Mesh(geom, materialPadrao(geom));
+        const grupo = new THREE.Group();
+        const nome = nomeBaseArquivo(arquivo);
+        grupo.name = nome;
+        mesh.name = nome;
+        grupo.add(mesh);
+        return grupo;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    async function carregarVariosStl(arquivos) {
+      const pecas = await Promise.all(arquivos.map((arquivo) => carregarStlComoPeca(arquivo)));
+      const root = new THREE.Group();
+      root.name = "conjunto-stl";
+      for (const peca of pecas) root.add(peca);
+      return root;
+    }
+
     function metadadosGltf(gltf) {
       const json = gltf.parser?.json;
       if (!json) return {};
 
       const asset = json.asset || {};
       return {
-        versaoGltf: asset.version || "â€”",
-        gerador: asset.generator || "â€”",
-        copyright: asset.copyright || "â€”",
+        versaoGltf: asset.version || "—",
+        gerador: asset.generator || "—",
+        copyright: asset.copyright || "—",
         cenas: json.scenes?.length ?? 0,
         nos: json.nodes?.length ?? 0,
         animacoes: gltf.animations?.length ?? 0,
@@ -570,15 +679,15 @@ import * as THREE from "three";
         texturasJson: json.textures?.length ?? 0,
         imagens: json.images?.length ?? 0,
         buffers: json.buffers?.length ?? 0,
-        extensoes: (json.extensionsUsed || []).join(", ") || "â€”",
+        extensoes: (json.extensionsUsed || []).join(", ") || "—",
       };
     }
 
     function montarSecoes(arquivo, geo, extras = {}) {
       const secoes = [];
       const medidas = converterMedidas(geo, arquivo.formato);
-      const origemLabel = medidas.origem === "m" ? "Metros (glTF)" : "MilÃ­metros (STL/OBJ/PLY)";
-      const exibicaoLabel = medidas.unidade === "m" ? "Metros" : "CentÃ­metros";
+      const origemLabel = medidas.origem === "m" ? "Metros (glTF)" : "Milímetros (STL/OBJ/PLY)";
+      const exibicaoLabel = medidas.unidade === "m" ? "Metros" : "Centímetros";
 
       secoes.push({
         titulo: "Arquivo",
@@ -588,6 +697,10 @@ import * as THREE from "three";
           ["Tamanho", arquivo.tamanho],
           ["Tipo MIME", arquivo.mime],
           ["Modificado", arquivo.modificado],
+          ...(arquivo.ficheiros?.length
+            ? [["Ficheiros", arquivo.ficheiros.join(", ")]]
+            : []),
+          ...(arquivo.pecas ? [["Peças importadas", String(arquivo.pecas)]] : []),
           ...(arquivo.tipoStl ? [["Tipo STL", arquivo.tipoStl]] : []),
           ...(arquivo.bibliotecaMtl ? [["Biblioteca MTL", arquivo.bibliotecaMtl]] : []),
         ],
@@ -598,12 +711,12 @@ import * as THREE from "three";
         itens: [
           ["Malhas", formatarNumero(geo.malhas, 0)],
           ["Geometrias", formatarNumero(geo.geometrias, 0)],
-          ["VÃ©rtices", formatarNumero(geo.vertices, 0)],
-          ["TriÃ¢ngulos", formatarNumero(geo.triangulos, 0)],
-          ["Ãrea de superfÃ­cie", formatarArea(medidas.areaM2, medidas.unidade)],
+          ["Vértices", formatarNumero(geo.vertices, 0)],
+          ["Triângulos", formatarNumero(geo.triangulos, 0)],
+          ["Área de superfície", formatarArea(medidas.areaM2, medidas.unidade)],
           ["Volume da malha", formatarVolume(medidas.volumeM3, medidas.unidade)],
           ["Indexadas", formatarNumero(geo.indexadas, 0)],
-          ["NÃ£o indexadas", formatarNumero(geo.naoIndexadas, 0)],
+          ["Não indexadas", formatarNumero(geo.naoIndexadas, 0)],
           ["Com normais", formatarNumero(geo.comNormais, 0)],
           ["Com UV", formatarNumero(geo.comUv, 0)],
           ["Com cores", formatarNumero(geo.comCores, 0)],
@@ -612,10 +725,10 @@ import * as THREE from "three";
       });
 
       secoes.push({
-        titulo: "DimensÃµes",
+        titulo: "Dimensões",
         itens: [
           ["Unidade do arquivo", origemLabel],
-          ["ExibiÃ§Ã£o", exibicaoLabel],
+          ["Exibição", exibicaoLabel],
           ["Largura (X)", formatarMedida(medidas.tamanhoM.x, medidas.unidade)],
           ["Altura (Y)", formatarMedida(medidas.tamanhoM.y, medidas.unidade)],
           ["Profundidade (Z)", formatarMedida(medidas.tamanhoM.z, medidas.unidade)],
@@ -629,7 +742,7 @@ import * as THREE from "three";
       secoes.push({
         titulo: "Materiais",
         itens: [
-          ["Materiais Ãºnicos", formatarNumero(geo.materiais, 0)],
+          ["Materiais únicos", formatarNumero(geo.materiais, 0)],
           ["Texturas detectadas", formatarNumero(geo.texturas, 0)],
         ],
       });
@@ -647,10 +760,10 @@ import * as THREE from "three";
 
       if (arquivo.formato === "3MF") {
         const itens3mf = [
-          ["Unidade padrÃ£o", "MilÃ­metros"],
-          ...(arquivo.titulo ? [["TÃ­tulo", arquivo.titulo]] : []),
+          ["Unidade padrão", "Milímetros"],
+          ...(arquivo.titulo ? [["Título", arquivo.titulo]] : []),
           ...(arquivo.autor ? [["Designer", arquivo.autor]] : []),
-          ...(arquivo.descricao ? [["DescriÃ§Ã£o", arquivo.descricao]] : []),
+          ...(arquivo.descricao ? [["Descrição", arquivo.descricao]] : []),
           ...(arquivo.objetos3mf !== undefined
             ? [["Objetos no arquivo", formatarNumero(arquivo.objetos3mf, 0)]]
             : []),
@@ -665,17 +778,17 @@ import * as THREE from "three";
         secoes.push({
           titulo: "glTF / GLB",
           itens: [
-            ["VersÃ£o glTF", gltfInfo.versaoGltf],
+            ["Versão glTF", gltfInfo.versaoGltf],
             ["Gerador", gltfInfo.gerador],
             ["Copyright", gltfInfo.copyright],
             ["Cenas", formatarNumero(gltfInfo.cenas, 0)],
-            ["NÃ³s", formatarNumero(gltfInfo.nos, 0)],
-            ["AnimaÃ§Ãµes", formatarNumero(gltfInfo.animacoes, 0)],
+            ["Nós", formatarNumero(gltfInfo.nos, 0)],
+            ["Animações", formatarNumero(gltfInfo.animacoes, 0)],
             ["Materiais", formatarNumero(gltfInfo.materiaisJson, 0)],
             ["Texturas", formatarNumero(gltfInfo.texturasJson, 0)],
             ["Imagens", formatarNumero(gltfInfo.imagens, 0)],
             ["Buffers", formatarNumero(gltfInfo.buffers, 0)],
-            ["ExtensÃµes", gltfInfo.extensoes],
+            ["Extensões", gltfInfo.extensoes],
           ],
         });
       }
@@ -688,7 +801,7 @@ import * as THREE from "three";
 
       const tituloPainel = document.createElement("p");
       tituloPainel.className = "info-panel-title";
-      tituloPainel.innerHTML = "<strong>InformaÃ§Ãµes</strong>";
+      tituloPainel.innerHTML = "<strong>Informações</strong>";
       infoPanel.appendChild(tituloPainel);
 
       secoes.forEach((secao) => {
@@ -699,7 +812,7 @@ import * as THREE from "three";
         cabecalho.type = "button";
         cabecalho.className = "info-section-header";
         cabecalho.setAttribute("aria-expanded", "false");
-        cabecalho.innerHTML = `<span class="info-chevron">â–¸</span>${secao.titulo}`;
+        cabecalho.innerHTML = `<span class="info-chevron">▸</span>${secao.titulo}`;
 
         const corpo = document.createElement("div");
         corpo.className = "info-section-body";
@@ -810,24 +923,37 @@ import * as THREE from "three";
       return hex === "#FFFFFF" || hex === "#89B4FA";
     }
 
-    function extrairCoresDoModelo(object) {
+    function normalizarHexCor(hex) {
+      if (!hex || typeof hex !== "string") return null;
+      const limpo = hex.trim();
+      if (!limpo) return null;
+      const comHash = limpo.startsWith("#") ? limpo : `#${limpo}`;
+      const upper = comHash.toUpperCase();
+      return /^#[0-9A-F]{6}$/.test(upper) ? upper : null;
+    }
+
+    function extrairCoresDoModelo(object, metaBambu = null) {
       const visto = new Set();
       const cores = [];
       let temCorVertice = false;
-      let temFilamentoBambu = false;
 
       function adicionarCor(hex) {
-        if (!hex) return;
-        const normalizado = hex.toUpperCase();
-        if (!/^#[0-9A-F]{6}$/.test(normalizado)) return;
-        if (visto.has(normalizado)) return;
+        const normalizado = normalizarHexCor(hex);
+        if (!normalizado || visto.has(normalizado)) return;
         visto.add(normalizado);
         cores.push(normalizado);
       }
 
+      const filamentos = analisarFilamentosBambu(object, metaBambu);
+      if (filamentos.length) {
+        for (const f of filamentos.sort((a, b) => a.slot - b.slot)) {
+          adicionarCor(f.hex);
+        }
+        if (cores.length) return cores;
+      }
+
       object.traverse((child) => {
-        if (!child.isMesh) return;
-        if (child.name?.startsWith("filament-")) temFilamentoBambu = true;
+        if (!child.isMesh || child.userData?.isSupport) return;
 
         const meshTemCorVertice = Boolean(child.geometry?.attributes?.color);
         if (meshTemCorVertice) temCorVertice = true;
@@ -859,12 +985,18 @@ import * as THREE from "three";
         }
       });
 
-      if (temFilamentoBambu || temCorVertice) return cores;
+      if (temCorVertice) return cores;
 
       const coresReais = cores.filter((hex) => !corEhPadraoRenderizador(hex));
       if (coresReais.length) return coresReais;
       if (cores.length > 1) return cores;
+      if (cores.length === 1) return cores;
       return [];
+    }
+
+    function atualizarCoresModeloAtual() {
+      if (!currentModel) return;
+      atualizarCoresModelo(extrairCoresDoModelo(currentModel, ultimoExtras?.bambu));
     }
 
     function atualizarCoresModelo(cores) {
@@ -886,7 +1018,7 @@ import * as THREE from "three";
       row.innerHTML = cores
         .map(
           (hex) =>
-            `<span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="${hex} â€” clique para filtrar/copiar"></span>`
+            `<span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="${hex} — clique para filtrar/copiar"></span>`
         )
         .join("");
 
@@ -907,8 +1039,8 @@ import * as THREE from "three";
 
       contagem.textContent =
         cores.length === 1
-          ? "1 cor Â· clique para filtrar"
-          : `${cores.length} cores Â· clique para filtrar`;
+          ? "1 cor · clique para filtrar"
+          : `${cores.length} cores · clique para filtrar`;
     }
 
     function limparCoresModelo() {
@@ -926,12 +1058,14 @@ import * as THREE from "three";
       ultimoFormato = arquivoMeta.formato || "STL";
 
       const geo = analisarGeometria(object);
-      const coresModelo = extrairCoresDoModelo(object);
+      const coresModelo = extrairCoresDoModelo(object, extras.bambu);
       salvarEstadoVisual(object);
       aplicarVisual(object);
       currentModel = object;
       modelPivot.add(object);
-      centerAndFrame(object);
+      centerAndFrame(object, {
+        naMesa: Boolean(extras.bambu) || ultimoFormato === "3MF",
+      });
 
       const caixa = new THREE.Box3().setFromObject(object);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
@@ -942,6 +1076,7 @@ import * as THREE from "three";
       secaoExtensoesCache = extensoes?.onModelLoaded(object, {
         ...extras,
         bambuImpressao: extras.bambu?.bambuImpressao,
+        formato: ultimoFormato,
       });
 
       const secoes = montarSecoesUltimo(geo);
@@ -950,6 +1085,7 @@ import * as THREE from "three";
       renderizarPainel(secoes);
       atualizarCoresModelo(coresModelo);
       ferramentas?.sincronizarCameras();
+      publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile);
       setStatus(`Modelo carregado: ${arquivoMeta.nome}`);
     }
 
@@ -991,11 +1127,34 @@ import * as THREE from "three";
           object = resultado.object;
           extras.bambu = resultado.meta;
         } else {
-          throw new Error(`Formato .${ext} nÃ£o suportado.`);
+          throw new Error(`Formato .${ext} não suportado.`);
         }
         return { object, extras };
       } finally {
         if (url) URL.revokeObjectURL(url);
+      }
+    }
+
+    async function loadVariosStl(arquivos) {
+      ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros STL…`);
+      setStatus(`Carregando ${arquivos.length} ficheiros STL…`);
+
+      try {
+        const arquivoMeta = await lerMetadadosVariosStl(arquivos);
+        ultimoArquivoFile = arquivos[0];
+        ultimoArquivosImportados = arquivos;
+        revogarUrlsFbx(fbxUrlsAtivas);
+
+        const object = await carregarVariosStl(arquivos);
+        for (const arquivo of arquivos) {
+          ferramentas?.salvarRecente(arquivo);
+        }
+
+        showModel(criarContainerModelo(object, "stl"), arquivoMeta, { multiStl: true });
+      } catch (err) {
+        setStatus(`Erro: ${err.message}`, true);
+      } finally {
+        ferramentas?.setLoading(false);
       }
     }
 
@@ -1006,6 +1165,8 @@ import * as THREE from "three";
 
       try {
         const arquivoMeta = await lerMetadadosArquivo(file, ext);
+        ultimoArquivoFile = file;
+        ultimoArquivosImportados = [file];
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
@@ -1038,20 +1199,26 @@ import * as THREE from "three";
       const fbx = arquivos.find((f) => f.name.toLowerCase().endsWith(".fbx"));
       if (fbx) {
         loadFile(fbx, arquivos);
+        e.target.value = "";
         return;
       }
 
       const zip = arquivos.find((f) => f.name.toLowerCase().endsWith(".zip"));
       if (zip) {
         loadFile(zip, arquivos);
+        e.target.value = "";
+        return;
+      }
+
+      const stls = arquivos.filter((f) => f.name.toLowerCase().endsWith(".stl"));
+      if (stls.length >= 2) {
+        loadVariosStl(stls);
+        e.target.value = "";
         return;
       }
 
       loadFile(arquivos[0], arquivos);
-    });
-
-    document.getElementById("btn-reset").addEventListener("click", () => {
-      if (currentModel) centerAndFrame(currentModel);
+      e.target.value = "";
     });
 
     function atualizarSecaoFilamentos() {
@@ -1143,7 +1310,11 @@ import * as THREE from "three";
       container,
       getCurrentModel: () => currentModel,
       getFormato: () => ultimoFormato,
+      getModelExtras: () => ultimoExtras,
+      getModelFile: () => ultimoArquivoFile,
+      getModelFiles: () => ultimoArquivosImportados,
       unidadeOrigemArquivo,
+      mmParaCena,
       centerAndFrame,
       setStatus,
       aplicarVisual,
@@ -1155,11 +1326,28 @@ import * as THREE from "three";
       carregarObjetoBruto,
       criarContainerModelo,
       getFerramentas: () => ferramentas,
+      refreshModelVisual: (model) => {
+        salvarEstadoVisual(model);
+        aplicarVisual(model);
+        atualizarCoresModeloAtual();
+      },
+      atualizarCoresModelo: atualizarCoresModeloAtual,
     });
 
     ferramentas.setLights(hemiLight, dirLight);
+    montarControlesViewport(document.querySelector(".viewer"));
     ferramentas.bindUi();
     extensoes.bindUi();
+
+    publicarProduto = initPublicarProduto({
+      renderer,
+      scene,
+      getCamera: () => ferramentas?.cameraAtiva?.() ?? camera,
+      getModelFile: () => ultimoArquivoFile,
+      getModelFiles: () => ultimoArquivosImportados,
+      hasModel: () => Boolean(currentModel && ultimoArquivoFile),
+      setStatus,
+    });
 
     const params = new URLSearchParams(location.search);
     if (params.get("produto")) {
@@ -1170,9 +1358,4 @@ import * as THREE from "three";
         modelPivot,
       });
     }
-
-    document.querySelector("[data-auth-logout-admin]")?.addEventListener("click", async (e) => {
-      e.preventDefault();
-      await logout();
-      window.location.href = "/login.html";
-    });
+})();

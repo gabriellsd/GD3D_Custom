@@ -6,14 +6,16 @@ import {
   getBambu3mfMeshXml,
   isSupportPartMeta,
   normalizeColorHex,
-  objectXmlHasPaintColor,
   parseAssemblyComponents,
+  parseBuildItems,
   parseDefaultExtruder,
   parseFilamentColours,
+  parseObjectModelPath,
   parsePartExtruders,
   parsePartMetadata,
   readBambu3mfZip,
   readZipEntryText,
+  resolverMontagem,
 } from './bambu3mfParse.js';
 
 export { decodeBambuPaintSlot, extractFilamentColorsFrom3mfBuffer } from './bambu3mfParse.js';
@@ -94,7 +96,8 @@ function buildAssemblyGroup(
       objectCache.set(component.path, objectFileXml);
     }
 
-    const innerXml = extractInnerObjectXml(objectFileXml, component.objectId);
+    const innerXml =
+      component.innerXml || extractInnerObjectXml(objectFileXml, component.objectId);
     if (!innerXml) continue;
 
     const meta = partMetadata.get(component.objectId);
@@ -104,6 +107,7 @@ function buildAssemblyGroup(
     const part = buildColoredGroup(innerXml, filamentColours, extruder);
 
     if (component.transform) {
+      part.userData.bambuTransform = component.transform;
       part.applyMatrix4(matrixFrom3mfTransform(component.transform));
     }
 
@@ -169,7 +173,7 @@ function buildColoredGroup(objectXml, filamentColours, defaultExtruder) {
 /**
  * Carrega 3MF Bambu com paint_color (multicolor AMS).
  */
-export function parseBambu3mfBuffer(buffer) {
+export function parseBambu3mfBuffer(buffer, options = {}) {
   const files = readBambu3mfZip(buffer);
   const mainModel = readZipEntryText(files, '3D/3dmodel.model');
   if (!mainModel) throw new Error('3MF Bambu: 3dmodel.model em falta');
@@ -180,23 +184,27 @@ export function parseBambu3mfBuffer(buffer) {
   const defaultExtruder = parseDefaultExtruder(modelSettings);
 
   const { objectXml } = getBambu3mfMeshXml(files);
-  const components = parseAssemblyComponents(mainModel);
+  const objectPath = parseObjectModelPath(mainModel);
+  const components = resolverMontagem(mainModel, objectPath, objectXml, files, options);
 
-  // AMS multicolor (paint_color): mesh único — ignora suportes em componentes extra.
-  if (components.length <= 1 || objectXmlHasPaintColor(objectXml)) {
-    return buildColoredGroup(objectXml, filamentColours, defaultExtruder);
+  if (components.length > 0) {
+    const partExtruders = parsePartExtruders(modelSettings);
+    const partMetadata = parsePartMetadata(modelSettings);
+    try {
+      return buildAssemblyGroup(
+        components,
+        files,
+        filamentColours,
+        partExtruders,
+        partMetadata,
+        defaultExtruder
+      );
+    } catch (err) {
+      if (!/vazia/i.test(err?.message || '')) throw err;
+    }
   }
 
-  const partExtruders = parsePartExtruders(modelSettings);
-  const partMetadata = parsePartMetadata(modelSettings);
-  return buildAssemblyGroup(
-    components,
-    files,
-    filamentColours,
-    partExtruders,
-    partMetadata,
-    defaultExtruder
-  );
+  return buildColoredGroup(objectXml, filamentColours, defaultExtruder);
 }
 
 export function loadBambuPaint3mf(url, onLoad, onProgress, onError) {

@@ -1,5 +1,5 @@
 ﻿/**
- * Compartilhar/restaurar estado da sessÃ£o via URL.
+ * Compartilhar/restaurar estado da sessão via URL.
  */
 
 export function serializarSessao(estado) {

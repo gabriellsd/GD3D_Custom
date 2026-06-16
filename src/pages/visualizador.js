@@ -5,8 +5,8 @@ import { initViewerCatalog, bindViewerOrderButton } from '../viewer/catalog.js';
 initShell({
   page: 'visualizador',
   title: 'Visualizar em 3D — GD3D Creative',
+}).then(() => {
+  initCustomizer();
+  initViewerCatalog();
+  bindViewerOrderButton();
 });
-
-initCustomizer();
-initViewerCatalog();
-bindViewerOrderButton();

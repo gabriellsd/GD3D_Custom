@@ -4,6 +4,4 @@ import { initShop } from '../shop/products.js';
 initShell({
   page: 'produtos',
   title: 'Loja — Modelos 3D Prontos | GD3D Creative',
-});
-
-initShop();
+}).then(() => initShop());

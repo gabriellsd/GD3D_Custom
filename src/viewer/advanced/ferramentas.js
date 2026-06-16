@@ -1,5 +1,5 @@
-﻿/**
- * Ferramentas avanÃ§adas do visualizador 3D.
+/**
+ * Ferramentas avançadas do visualizador 3D.
  */
 import * as THREE from "three";
 import {
@@ -215,7 +215,7 @@ export function initFerramentas(app) {
     }
     if (!estado.bbox || !app.getCurrentModel()) return;
     const box = new THREE.Box3().setFromObject(app.modelPivot);
-    bboxHelper = new THREE.Box3Helper(box, 0x89b4fa);
+    bboxHelper = new THREE.Box3Helper(box, 0xe8a317);
     app.scene.add(bboxHelper);
   }
 
@@ -459,7 +459,7 @@ export function initFerramentas(app) {
     app.setStatus(
       estado.filtroCor
         ? `Filtrando cor ${estado.filtroCor}`
-        : "Todas as cores visÃ­veis"
+        : "Todas as cores visíveis"
     );
   }
 
@@ -476,14 +476,14 @@ export function initFerramentas(app) {
       const pct = totalTris ? ((f.triangles / totalTris) * 100).toFixed(1) : "0";
       return [
         rotuloFilamento(f),
-        `${pct}% Â· ${f.triangles.toLocaleString("pt-BR")} triÃ¢ngulos`,
+        `${pct}% · ${f.triangles.toLocaleString("pt-BR")} triângulos`,
       ];
     });
 
     if (estado.temSuportes) {
       itens.push([
         "Suportes",
-        estado.mostrarSuportes ? "VisÃ­veis" : "Ocultos",
+        estado.mostrarSuportes ? "Visíveis" : "Ocultos",
       ]);
     }
 
@@ -546,6 +546,7 @@ export function initFerramentas(app) {
     chk("chk-plano-corte", prefs.planoCorte);
     chk("chk-suportes", prefs.suportes);
     chk("chk-mesa", prefs.mesa);
+    chk("chk-mesa-overlay", prefs.mesa);
     const selMat = document.getElementById("sel-material");
     if (selMat && prefs.presetMaterial) selMat.value = prefs.presetMaterial;
 
@@ -568,29 +569,43 @@ export function initFerramentas(app) {
     dispararChange("slider-luz");
   }
 
-  function definirVista(tipo) {
+    function definirVista(tipo) {
     app.resetarRotacao();
     app.setPanOffset(0, 0, 0);
     const d = app.getCameraDistance();
     const c = app.getCentroVisao();
-    const pos = { x: c.x, y: c.y, z: c.z + d };
-    if (tipo === "frente") pos.z = c.z + d;
-    else if (tipo === "topo") {
-      pos.y = c.y + d;
-      pos.z = c.z;
-    } else if (tipo === "lateral") {
-      pos.x = c.x + d;
-      pos.z = c.z;
-    } else if (tipo === "iso") {
-      const o = d * 0.65;
-      pos.x = c.x + o;
-      pos.y = c.y + o;
-      pos.z = c.z + o;
-    }
-    perspCamera.position.set(pos.x, pos.y + (tipo === "topo" ? 0 : d * 0.18), pos.z);
+    const inclinacao = d * 0.18;
+
+    const destinos = {
+      frente: [0, inclinacao, d],
+      tras: [0, inclinacao, -d],
+      topo: [0, d, 0],
+      fundo: [0, -d, 0],
+      direita: [d, inclinacao, 0],
+      lateral: [d, inclinacao, 0],
+      esquerda: [-d, inclinacao, 0],
+      iso: [d * 0.65, d * 0.65 + inclinacao, d * 0.65],
+    };
+
+    const dest = destinos[tipo] || destinos.iso;
+    perspCamera.position.set(c.x + dest[0], c.y + dest[1], c.z + dest[2]);
     perspCamera.lookAt(c.x, c.y, c.z);
     sincronizarCameras();
-    app.setStatus(`Vista: ${tipo}`);
+
+    document.querySelectorAll(".btn-vista.is-ativa").forEach((b) => b.classList.remove("is-ativa"));
+    document.querySelector(`.btn-vista[data-vista="${tipo}"]`)?.classList.add("is-ativa");
+
+    const rotulos = {
+      frente: "Frente",
+      tras: "Trás",
+      topo: "Topo",
+      fundo: "Fundo",
+      direita: "Direita",
+      esquerda: "Esquerda",
+      lateral: "Lateral",
+      iso: "Isométrica",
+    };
+    app.setStatus(`Vista: ${rotulos[tipo] || tipo}`);
   }
 
   function capturarTela() {
@@ -637,7 +652,7 @@ export function initFerramentas(app) {
     const registro = await lerArquivoRecente(nome);
     if (!registro?.dados) {
       app.setStatus(
-        `Abra "${nome}" novamente pelo botÃ£o Abrir modelo para guardar em cache`,
+        `Abra "${nome}" novamente pelo botão Abrir modelo para guardar em cache`,
         true
       );
       return;
@@ -682,7 +697,7 @@ export function initFerramentas(app) {
     estado.acaoAnimacao.play();
     estado.animando = true;
     if (painelAnim) painelAnim.classList.remove("hidden");
-    if (btnAnim) btnAnim.textContent = "Pausar animaÃ§Ã£o";
+    if (btnAnim) btnAnim.textContent = "Pausar animação";
   }
 
   function iniciarAnimacaoGltf(gltf) {
@@ -728,10 +743,10 @@ export function initFerramentas(app) {
         estado.reguaPontos.push(ponto);
         atualizarRegua();
         if (estado.reguaPontos.length === 1) {
-          app.setStatus("RÃ©gua: selecione o segundo ponto");
+          app.setStatus("Régua: selecione o segundo ponto");
         } else if (estado.reguaPontos.length >= 2) {
           const dist = estado.reguaPontos[0].distanceTo(estado.reguaPontos[1]);
-          app.setStatus(`DistÃ¢ncia: ${app.formatarDistancia(app.cenaParaMetros(dist))}`);
+          app.setStatus(`Distância: ${app.formatarDistancia(app.cenaParaMetros(dist))}`);
         }
       }
       return true;
@@ -833,7 +848,7 @@ export function initFerramentas(app) {
         sincronizarCameras();
       }
       salvarPreferencias({ ortografico: e.target.checked });
-      app.setStatus(estado.ortografico ? "ProjeÃ§Ã£o ortogrÃ¡fica" : "ProjeÃ§Ã£o perspectiva");
+      app.setStatus(estado.ortografico ? "Projeção ortográfica" : "Projeção perspectiva");
     });
     document.getElementById("chk-overhangs")?.addEventListener("change", (e) => {
       estado.overhangs = e.target.checked;
@@ -845,7 +860,7 @@ export function initFerramentas(app) {
       estado.regua = e.target.checked;
       if (!estado.regua) limparRegua();
       salvarPreferencias({ regua: e.target.checked });
-      app.setStatus(estado.regua ? "RÃ©gua: clique em dois pontos" : "RÃ©gua desativada");
+      app.setStatus(estado.regua ? "Régua: clique em dois pontos" : "Régua desativada");
     });
     document.getElementById("chk-plano-corte")?.addEventListener("change", (e) => {
       estado.planoCorte = e.target.checked;
@@ -857,7 +872,7 @@ export function initFerramentas(app) {
       aplicarSuportes();
       salvarPreferencias({ suportes: e.target.checked });
       app.atualizarSecaoFilamentos?.();
-      app.setStatus(estado.mostrarSuportes ? "Suportes visÃ­veis" : "Suportes ocultos");
+      app.setStatus(estado.mostrarSuportes ? "Suportes visíveis" : "Suportes ocultos");
     });
 
     document.getElementById("slider-luz")?.addEventListener("input", (e) => {
@@ -874,16 +889,20 @@ export function initFerramentas(app) {
       btn.addEventListener("click", () => definirVista(btn.dataset.vista));
     });
 
+    document.getElementById("btn-vista-centrar")?.addEventListener("click", () => {
+      if (app.getCurrentModel()) app.centerAndFrame(app.getCurrentModel());
+    });
+
     btnAnim?.addEventListener("click", () => {
       if (!estado.acaoAnimacao) return;
       if (estado.animando) {
         estado.acaoAnimacao.paused = true;
         estado.animando = false;
-        btnAnim.textContent = "Reproduzir animaÃ§Ã£o";
+        btnAnim.textContent = "Reproduzir animação";
       } else {
         estado.acaoAnimacao.paused = false;
         estado.animando = true;
-        btnAnim.textContent = "Pausar animaÃ§Ã£o";
+        btnAnim.textContent = "Pausar animação";
       }
     });
 
@@ -924,7 +943,7 @@ export function initFerramentas(app) {
         : modeloUrl;
       fetch(fetchUrl)
         .then((r) => {
-          if (!r.ok) throw new Error("Modelo nÃ£o encontrado");
+          if (!r.ok) throw new Error("Modelo não encontrado");
           return r.blob();
         })
         .then((blob) => {

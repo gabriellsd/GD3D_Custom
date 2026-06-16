@@ -1,5 +1,5 @@
-﻿/**
- * DiagnÃ³stico bÃ¡sico de malha (STL/OBJ/PLY etc.).
+/**
+ * Diagnóstico básico de malha (STL/OBJ/PLY etc.).
  */
 import * as THREE from "three";
 
@@ -71,10 +71,10 @@ export function analisarMalha(object) {
     stats.avisos.push(`Malha aberta: ${stats.bordasAbertas} arestas de borda`);
   }
   if (stats.naoManifold > 0) {
-    stats.avisos.push(`NÃ£o-manifold: ${stats.naoManifold} arestas`);
+    stats.avisos.push(`Não-manifold: ${stats.naoManifold} arestas`);
   }
   if (stats.degenerados > 0) {
-    stats.avisos.push(`${stats.degenerados} triÃ¢ngulos degenerados`);
+    stats.avisos.push(`${stats.degenerados} triângulos degenerados`);
   }
   if (stats.normaisInvertidas > stats.triangulos * 0.1) {
     stats.avisos.push("Muitas normais possivelmente invertidas");
@@ -88,13 +88,13 @@ export function analisarMalha(object) {
 
 export function secaoAnaliseMalha(stats) {
   return {
-    titulo: "DiagnÃ³stico da malha",
+    titulo: "Diagnóstico da malha",
     itens: [
-      ["TriÃ¢ngulos analisados", stats.triangulos.toLocaleString("pt-BR")],
+      ["Triângulos analisados", stats.triangulos.toLocaleString("pt-BR")],
       ["Arestas abertas", stats.bordasAbertas.toLocaleString("pt-BR")],
-      ["Arestas nÃ£o-manifold", stats.naoManifold.toLocaleString("pt-BR")],
-      ["TriÃ¢ngulos degenerados", stats.degenerados.toLocaleString("pt-BR")],
-      ["Status", stats.avisos.join(" Â· ")],
+      ["Arestas não-manifold", stats.naoManifold.toLocaleString("pt-BR")],
+      ["Triângulos degenerados", stats.degenerados.toLocaleString("pt-BR")],
+      ["Status", stats.avisos.join(" · ")],
     ],
   };
 }

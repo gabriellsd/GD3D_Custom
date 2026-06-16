@@ -1,4 +1,4 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import * as fflate from "three/addons/libs/fflate.module.js";
 import { detectarBambu3mf, parseBambu3mfBuffer } from "./bambu-3mf.js";
 
@@ -225,12 +225,12 @@ function construirMalha(dados, entrada, materiaisBase, gruposCor) {
   return grupo.children.length === 1 ? grupo.children[0] : grupo;
 }
 
-export function carregar3mf(arrayBuffer) {
+export function carregar3mf(arrayBuffer, options = {}) {
   const buffer =
     arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer);
 
   if (detectarBambu3mf(buffer)) {
-    return parseBambu3mfBuffer(buffer);
+    return parseBambu3mfBuffer(buffer, options);
   }
 
   return { object: carregar3mfPadrao(buffer), meta: null };
@@ -317,7 +317,7 @@ function carregar3mfPadrao(arrayBuffer) {
 
     const dados = objetos.get(id);
     if (!dados) {
-      console.warn(`Objeto 3MF ignorado (id ${id} nÃ£o encontrado)`);
+      console.warn(`Objeto 3MF ignorado (id ${id} não encontrado)`);
       const vazio = new THREE.Group();
       construidos.set(id, vazio);
       return vazio;
@@ -359,7 +359,7 @@ function carregar3mfPadrao(arrayBuffer) {
   }
 
   if (grupo.children.length === 0) {
-    throw new Error("O arquivo 3MF nÃ£o contÃ©m geometria exibÃ­vel.");
+    throw new Error("O arquivo 3MF não contém geometria exibível.");
   }
 
   return grupo;

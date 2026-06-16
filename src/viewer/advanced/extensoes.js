@@ -1,5 +1,5 @@
 ﻿/**
- * ExtensÃµes do visualizador: impressÃ£o, formatos, export, AR, etc.
+ * Extensões do visualizador: impressão, formatos, export, AR, etc.
  */
 import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -17,10 +17,26 @@ import {
 } from "./materiais-preview.js";
 import { capturarPngTransparente, exportarGifGiro } from "./export-media.js";
 import { coletarPecas, renderizarArvorePecas } from "./arvore-pecas.js";
+import {
+  juntarMeshesModelo,
+  substituirModeloJuntado,
+  substituirConteudoOrientacao,
+  contarPecasVisiveis,
+} from "./juntar-pecas.js";
+import { carregar3mf } from "./loader-3mf.js";
 import { criarComparacao } from "./comparacao.js";
 import { copiarLinkCompartilhamento, lerSessaoDaUrl } from "./sessao-share.js";
 import { suportaAr, iniciarAr } from "./ar-xr.js";
+import { sincronizarToggleMesa } from "./controles-viewport.js";
 import { secaoMetadadosBambu } from "./bambu-metadados.js";
+import {
+  analisarFacesApoio,
+  secaoApoioMesa,
+  centralizarNaMesa,
+  alinharBaseNaMesa,
+  aplicarDeslocamentoMesa,
+  marcarPosicaoBaseMesa,
+} from "./posicionar-na-mesa.js";
 
 let dracoLoader = null;
 
@@ -44,6 +60,7 @@ export function initExtensoes(app) {
     mesaMsg: "",
     gcodeGrupo: null,
     extrasBambu: null,
+    analiseApoio: null,
   };
 
   let overlayAtalhos = null;
@@ -52,13 +69,181 @@ export function initExtensoes(app) {
     return app.unidadeOrigemArquivo?.(app.getFormato?.()) === "m" ? 1000 : 1;
   }
 
+  function mmParaCena(mm) {
+    return app.mmParaCena?.(mm) ?? mm;
+  }
+
+  function atualizarUiPosicaoMesa() {
+    const grupo = document.getElementById("grupo-posicao-mesa");
+    if (!grupo) return;
+    grupo.classList.toggle("hidden", !mesa.isAtivo() || !app.getCurrentModel());
+  }
+
+  function atualizarLimitesSlidersMesa() {
+    const tipo = document.getElementById("sel-mesa")?.value || "bambu_a1";
+    const cfg = mesa.tipos[tipo] || mesa.tipos.bambu_a1;
+    const half = Math.round(Math.min(cfg.w, cfg.d) / 2);
+    for (const id of ["slider-mesa-x", "slider-mesa-z"]) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.min = String(-half);
+      el.max = String(half);
+      const v = parseInt(el.value, 10);
+      if (v < -half) el.value = String(-half);
+      if (v > half) el.value = String(half);
+    }
+  }
+
+  function sincronizarSlidersPosicaoMesa(offset = { x: 0, z: 0 }) {
+    const sx = document.getElementById("slider-mesa-x");
+    const sz = document.getElementById("slider-mesa-z");
+    const vx = document.getElementById("val-mesa-x");
+    const vz = document.getElementById("val-mesa-z");
+    if (sx) sx.value = String(Math.round(offset.x));
+    if (sz) sz.value = String(Math.round(offset.z));
+    if (vx) vx.textContent = String(Math.round(offset.x));
+    if (vz) vz.textContent = String(Math.round(offset.z));
+  }
+
+  function atualizarAnaliseApoio() {
+    const model = app.getCurrentModel();
+    if (!model || !mesa.isAtivo()) {
+      estado.analiseApoio = null;
+      return;
+    }
+    estado.analiseApoio = analisarFacesApoio(model);
+  }
+
+  function reposicionarNaMesa(tipo = "centralizar") {
+    const model = app.getCurrentModel();
+    if (!model) return;
+
+    if (tipo === "centralizar") {
+      centralizarNaMesa(model);
+      sincronizarSlidersPosicaoMesa({ x: 0, z: 0 });
+      app.centerAndFrame?.(model, { naMesa: true });
+      app.setStatus("Modelo recentrado na mesa");
+    } else if (tipo === "assentar") {
+      alinharBaseNaMesa(model);
+      if (model.userData.mesaBasePos) {
+        model.userData.mesaBasePos.y = model.position.y;
+      }
+      app.setStatus("Base assente na mesa");
+    }
+
+    atualizarAnaliseApoio();
+    atualizarMesa();
+  }
+
+  function aplicarSliderPosicaoMesa() {
+    const model = app.getCurrentModel();
+    if (!model) return;
+    const xmm = parseInt(document.getElementById("slider-mesa-x")?.value || "0", 10);
+    const zmm = parseInt(document.getElementById("slider-mesa-z")?.value || "0", 10);
+    aplicarDeslocamentoMesa(model, xmm, zmm, mmParaCena);
+    sincronizarSlidersPosicaoMesa({ x: xmm, z: zmm });
+    atualizarAnaliseApoio();
+    atualizarMesa();
+  }
+
+  async function juntarPecasVisiveis() {
+    const model = app.getCurrentModel();
+    if (!model) throw new Error("Carregue um modelo primeiro.");
+
+    comparacao.limpar();
+    const inputComp = document.getElementById("input-comparacao");
+    if (inputComp) inputComp.value = "";
+
+    const pecasAntes = contarPecasVisiveis(model);
+    if (pecasAntes < 2) {
+      throw new Error("São necessárias pelo menos 2 peças visíveis. Recarregue o ficheiro 3MF.");
+    }
+
+    const file = app.getModelFile?.();
+    const extrasModelo = app.getModelExtras?.() || {};
+    const arquivosImportados = app.getModelFiles?.() || [];
+    const formato = (app.getFormato?.() || "").toUpperCase();
+    const ext = file?.name?.split(".").pop()?.toLowerCase() || "";
+    const eh3mf = formato === "3MF" || ext === "3mf" || ext === "mf3";
+    const multiStl =
+      Boolean(extrasModelo.multiStl) ||
+      arquivosImportados.filter((f) => f.name?.toLowerCase().endsWith(".stl")).length >= 2;
+
+    let montagem3mf = false;
+
+    if (file && eh3mf) {
+      app.setStatus("A montar peças do 3MF…");
+      const buffer = await file.arrayBuffer();
+
+      const { object: montadoObj } = carregar3mf(buffer, { layout: "montado" });
+      substituirConteudoOrientacao(model, montadoObj);
+      model.updateMatrixWorld(true);
+      montagem3mf = true;
+
+      sincronizarSlidersPosicaoMesa({ x: 0, z: 0 });
+      if (model.userData) {
+        model.userData.mesaBasePos = model.position.clone();
+        model.userData.mesaOffsetMm = { x: 0, z: 0 };
+      }
+    }
+
+    const resultado = juntarMeshesModelo(model, {
+      encaixarBbox: !montagem3mf && !multiStl,
+      encaixarProximidade: multiStl,
+    });
+
+    if (!resultado.jaUnico) {
+      substituirModeloJuntado(model, resultado.mesh);
+      model.userData.pecasUnidas = true;
+    }
+
+    if (multiStl || montagem3mf) {
+      model.position.set(0, 0, 0);
+      if (model.userData) {
+        model.userData.mesaOffsetMm = { x: 0, z: 0 };
+        model.userData.mesaBasePos = model.position.clone();
+      }
+      ativarMesa(false);
+    }
+
+    estado.presetMaterial = "padrao";
+    const selMaterial = document.getElementById("sel-material");
+    if (selMaterial) selMaterial.value = "padrao";
+
+    salvarMateriaisOriginais(model);
+    restaurarMateriais(model);
+    app.refreshModelVisual?.(model);
+    estado.analiseMalha = analisarMalha(model);
+    atualizarArvore();
+    atualizarAnaliseApoio();
+    atualizarMesa();
+    app.atualizarSecaoFilamentos?.();
+    app.atualizarCoresModelo?.();
+    app.centerAndFrame(model, {
+      naMesa: multiStl || montagem3mf ? false : mesa.isAtivo(),
+    });
+    let msgStatus = "Modelo já era uma única peça.";
+    if (!resultado.jaUnico) {
+      if (multiStl) {
+        msgStatus = resultado.avisoMontagem
+          ? `Montado com aviso: ${resultado.avisoMontagem}`
+          : `Montado: ${pecasAntes} STL → 1 modelo.`;
+      } else if (montagem3mf) {
+        msgStatus = `Montado e unido: ${pecasAntes} peças → 1 modelo.`;
+      } else {
+        msgStatus = `Unido: ${pecasAntes} peças → 1 modelo (pecas-unidas).`;
+      }
+    }
+    app.setStatus(msgStatus);
+  }
+
   function atualizarMesa() {
-    mesa.remover(app.scene);
+    mesa.remover(app.modelPivot);
     if (!mesa.isAtivo() || !app.getCurrentModel()) {
       estado.mesaMsg = "";
       return;
     }
-    const info = mesa.atualizar(app.scene, app.modelPivot, escalaCena());
+    const info = mesa.atualizar(app.modelPivot, escalaCena());
     estado.mesaMsg = info?.mensagem || "";
     const el = document.getElementById("mesa-status");
     if (el) {
@@ -82,10 +267,12 @@ export function initExtensoes(app) {
     }
     if (estado.mesaMsg && mesa.isAtivo()) {
       secoes.push({
-        titulo: "Mesa de impressÃ£o",
+        titulo: "Mesa de impressão",
         itens: [["Status", estado.mesaMsg]],
       });
     }
+    const apoio = secaoApoioMesa(estado.analiseApoio);
+    if (apoio) secoes.push(apoio);
     return secoes;
   }
 
@@ -123,7 +310,7 @@ export function initExtensoes(app) {
       const res = await fetch("/api/converter-step", { method: "POST", body: form });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "ConversÃ£o STEP falhou");
+        throw new Error(err.detail || "Conversão STEP falhou");
       }
       const blob = await res.blob();
       const stlFile = new File([blob], file.name.replace(/\.(step|stp)$/i, ".stl"));
@@ -145,6 +332,15 @@ export function initExtensoes(app) {
     return null;
   }
 
+  function ativarMesa(ativo) {
+    mesa.setAtivo(ativo);
+    sincronizarToggleMesa(ativo);
+    atualizarLimitesSlidersMesa();
+    atualizarUiPosicaoMesa();
+    atualizarMesa();
+    app.getFerramentas?.()?.salvarPreferencias({ mesa: ativo });
+  }
+
   function onModelLoaded(object, extras = {}) {
     document.getElementById("secao-gcode")?.classList.toggle("hidden", !extras.gcode);
     estado.gcodeGrupo = extras.gcode ? object : null;
@@ -154,19 +350,30 @@ export function initExtensoes(app) {
     if (estado.presetMaterial !== "padrao") {
       aplicarPresetMaterial(object, estado.presetMaterial);
     }
+    if (extras.bambuImpressao || extras.formato === "3MF") {
+      ativarMesa(true);
+    }
+    estado.analiseApoio =
+      mesa.isAtivo() || extras.formato === "3MF"
+        ? analisarFacesApoio(object)
+        : null;
+    atualizarLimitesSlidersMesa();
+    sincronizarSlidersPosicaoMesa({ x: 0, z: 0 });
+    atualizarUiPosicaoMesa();
     atualizarArvore();
-    atualizarMesa();
     return secoesExtras();
   }
 
   function onModelCleared() {
     comparacao.limpar();
-    mesa.remover(app.scene);
+    mesa.remover(app.modelPivot);
     estado.pecas = [];
     estado.analiseMalha = null;
     estado.mesaMsg = "";
     estado.gcodeGrupo = null;
     estado.extrasBambu = null;
+    estado.analiseApoio = null;
+    atualizarUiPosicaoMesa();
     document.getElementById("secao-gcode")?.classList.add("hidden");
     renderizarArvorePecas(document.getElementById("arvore-pecas"), []);
   }
@@ -183,7 +390,7 @@ export function initExtensoes(app) {
     model.scale.multiplyScalar(fator);
     app.centerAndFrame(model);
     atualizarMesa();
-    app.setStatus(`Escala aplicada: maior dimensÃ£o â‰ˆ ${valorMm} mm`);
+    app.setStatus(`Escala aplicada: maior dimensão ≈ ${valorMm} mm`);
   }
 
   function mostrarAtalhos() {
@@ -198,7 +405,7 @@ export function initExtensoes(app) {
       <div class="overlay-atalhos-box">
         <h3>Atalhos</h3>
         <ul>
-          <li><kbd>R</kbd> Resetar cÃ¢mera</li>
+          <li><kbd>R</kbd> Resetar câmera</li>
           <li><kbd>W</kbd> Wireframe</li>
           <li><kbd>F</kbd> Tela cheia</li>
           <li><kbd>S</kbd> Captura de tela</li>
@@ -228,7 +435,7 @@ export function initExtensoes(app) {
     if (sessao.prefs) ferr?.salvarPreferencias(sessao.prefs);
     ferr?.aplicarPreferencias?.();
     if (sessao.bgIndex != null) app.aplicarPreferenciaFundo?.(sessao.bgIndex);
-    app.setStatus("SessÃ£o restaurada da URL");
+    app.setStatus("Sessão restaurada da URL");
   }
 
   function bindUi() {
@@ -242,14 +449,35 @@ export function initExtensoes(app) {
         .join("");
       selMesa.addEventListener("change", () => {
         mesa.setTipo(selMesa.value);
+        atualizarLimitesSlidersMesa();
         atualizarMesa();
       });
     }
 
+    document.getElementById("btn-recentrar-mesa")?.addEventListener("click", () => {
+      reposicionarNaMesa("centralizar");
+    });
+
+    document.getElementById("btn-assentar-mesa")?.addEventListener("click", () => {
+      reposicionarNaMesa("assentar");
+    });
+
+    for (const id of ["slider-mesa-x", "slider-mesa-z"]) {
+      document.getElementById(id)?.addEventListener("input", () => {
+        const sx = document.getElementById("slider-mesa-x");
+        const sz = document.getElementById("slider-mesa-z");
+        document.getElementById("val-mesa-x").textContent = sx?.value ?? "0";
+        document.getElementById("val-mesa-z").textContent = sz?.value ?? "0";
+        aplicarSliderPosicaoMesa();
+      });
+    }
+
     document.getElementById("chk-mesa")?.addEventListener("change", (e) => {
-      mesa.setAtivo(e.target.checked);
-      atualizarMesa();
-      app.getFerramentas?.()?.salvarPreferencias({ mesa: e.target.checked });
+      ativarMesa(e.target.checked);
+    });
+
+    document.getElementById("chk-mesa-overlay")?.addEventListener("change", (e) => {
+      ativarMesa(e.target.checked);
     });
 
     document.getElementById("btn-auto-orient")?.addEventListener("click", () => {
@@ -257,9 +485,14 @@ export function initExtensoes(app) {
       if (!model) return;
       const q = calcularAutoOrientacao(model);
       aplicarAutoOrientacao(app.modelPivot, q);
-      app.centerAndFrame(model);
+      if (mesa.isAtivo()) {
+        centralizarNaMesa(model);
+        sincronizarSlidersPosicaoMesa({ x: 0, z: 0 });
+      }
+      app.centerAndFrame(model, { naMesa: mesa.isAtivo() });
+      atualizarAnaliseApoio();
       atualizarMesa();
-      app.setStatus("Auto-orientaÃ§Ã£o aplicada");
+      app.setStatus("Auto-orientação aplicada");
     });
 
     document.getElementById("sel-material")?.addEventListener("change", (e) => {
@@ -281,7 +514,7 @@ export function initExtensoes(app) {
       const input = document.getElementById("input-escala-mm");
       const v = parseFloat(input?.value);
       if (!v || v <= 0) {
-        app.setStatus("Informe uma escala vÃ¡lida em mm", true);
+        app.setStatus("Informe uma escala válida em mm", true);
         return;
       }
       aplicarEscala(v);
@@ -295,18 +528,18 @@ export function initExtensoes(app) {
 
     document.getElementById("btn-gif-giro")?.addEventListener("click", async () => {
       const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
-      app.setStatus("Gerando vÃ­deo...");
+      app.setStatus("Gerando vídeo...");
       try {
         await exportarGifGiro({
           renderer: app.renderer,
           scene: app.scene,
           camera: cam,
           modelPivot: app.modelPivot,
-          onProgress: (a, b) => app.setStatus(`VÃ­deo: quadro ${a}/${b}`),
+          onProgress: (a, b) => app.setStatus(`Vídeo: quadro ${a}/${b}`),
         });
-        app.setStatus("VÃ­deo WebM salvo");
+        app.setStatus("Vídeo WebM salvo");
       } catch (err) {
-        app.setStatus(`VÃ­deo: ${err.message}`, true);
+        app.setStatus(`Vídeo: ${err.message}`, true);
       }
     });
 
@@ -314,9 +547,9 @@ export function initExtensoes(app) {
       try {
         const prefs = app.getFerramentas?.()?.lerPreferencias?.() || {};
         const url = await copiarLinkCompartilhamento({ prefs, bgIndex: prefs.bgIndex });
-        app.setStatus("Link copiado para a Ã¡rea de transferÃªncia");
+        app.setStatus("Link copiado para a área de transferência");
       } catch {
-        app.setStatus("NÃ£o foi possÃ­vel copiar o link", true);
+        app.setStatus("Não foi possível copiar o link", true);
       }
     });
 
@@ -344,16 +577,24 @@ export function initExtensoes(app) {
           modelo,
           document.getElementById("sel-modo-comparacao")?.value || "ghost"
         );
-        app.setStatus(`ComparaÃ§Ã£o: ${file.name}`);
+        app.setStatus(`Comparação: ${file.name}`);
       } catch (err) {
-        app.setStatus(`ComparaÃ§Ã£o: ${err.message}`, true);
+        app.setStatus(`Comparação: ${err.message}`, true);
       }
       e.target.value = "";
     });
 
+    document.getElementById("btn-juntar-pecas")?.addEventListener("click", async () => {
+      try {
+        await juntarPecasVisiveis();
+      } catch (err) {
+        app.setStatus(err.message, true);
+      }
+    });
+
     document.getElementById("btn-limpar-comparacao")?.addEventListener("click", () => {
       comparacao.limpar();
-      app.setStatus("ComparaÃ§Ã£o removida");
+      app.setStatus("Comparação removida");
     });
 
     document.getElementById("slider-gcode-camada")?.addEventListener("input", (e) => {
@@ -391,6 +632,7 @@ export function initExtensoes(app) {
     onModelCleared,
     secoesExtras,
     atualizarMesa,
+    reposicionarNaMesa,
     setExtrasBambu(meta) {
       estado.extrasBambu = meta;
     },

@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 export const PRESETS_MATERIAIS = {
-  padrao: { label: "PadrÃ£o", roughness: 0.6, metalness: 0.1 },
+  padrao: { label: "Padrão", roughness: 0.6, metalness: 0.1 },
   pla_fosco: { label: "PLA fosco", roughness: 0.85, metalness: 0.0 },
   petg_brilho: { label: "PETG brilhante", roughness: 0.25, metalness: 0.05 },
   silk: { label: "Silk", roughness: 0.35, metalness: 0.45 },

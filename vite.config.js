@@ -124,6 +124,7 @@ export default defineConfig({
         sobre: resolve(__dirname, 'sobre.html'),
         contato: resolve(__dirname, 'contato.html'),
         login: resolve(__dirname, 'login.html'),
+        admin: resolve(__dirname, 'admin.html'),
       },
     },
   },

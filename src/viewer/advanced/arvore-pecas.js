@@ -1,23 +1,50 @@
-﻿/**
- * Ãrvore de peÃ§as / meshes do modelo.
+/**
+ * Árvore de peças / meshes do modelo.
  */
+
+function obterGrupoPeca(mesh) {
+  const pai = mesh.parent;
+  if (pai?.isGroup && !pai.isMesh && pai !== mesh) return pai;
+  return mesh;
+}
+
+function nomeGrupoPeca(grupo, indice) {
+  const n = grupo.name?.trim();
+  if (n && !/^filament-\d+$/i.test(n) && n !== "pecas-unidas") return n;
+  if (grupo.userData?.supportName) return grupo.userData.supportName;
+  return `Peça ${indice + 1}`;
+}
+
 export function coletarPecas(object) {
-  const pecas = [];
+  const mapa = new Map();
+
   object.traverse((child) => {
-    if (!child.isMesh) return;
-    const nome =
-      child.name ||
-      child.parent?.name ||
-      `Mesh ${pecas.length + 1}`;
-    pecas.push({ id: child.uuid, nome, mesh: child, visivel: child.visible });
+    if (!child.isMesh || child.userData?.isSupport) return;
+
+    const grupo = obterGrupoPeca(child);
+    if (!mapa.has(grupo.uuid)) {
+      mapa.set(grupo.uuid, { grupo, meshes: [] });
+    }
+    mapa.get(grupo.uuid).meshes.push(child);
   });
-  return pecas;
+
+  return [...mapa.values()].map((entrada, indice) => {
+    const { grupo, meshes } = entrada;
+    const visivel = meshes.every((m) => m.visible);
+    return {
+      id: grupo.uuid,
+      nome: nomeGrupoPeca(grupo, indice),
+      mesh: meshes[0],
+      meshes,
+      visivel,
+    };
+  });
 }
 
 export function renderizarArvorePecas(container, pecas, onToggle) {
   if (!container) return;
   if (!pecas.length) {
-    container.innerHTML = '<p class="info-vazio">Nenhuma peÃ§a</p>';
+    container.innerHTML = '<p class="info-vazio">Nenhuma peça</p>';
     return;
   }
 
@@ -37,7 +64,8 @@ export function renderizarArvorePecas(container, pecas, onToggle) {
       const peca = pecas.find((p) => p.id === input.dataset.id);
       if (!peca) return;
       peca.visivel = input.checked;
-      peca.mesh.visible = input.checked;
+      const alvos = peca.meshes ?? [peca.mesh];
+      for (const mesh of alvos) mesh.visible = input.checked;
       onToggle?.(peca);
     });
   });

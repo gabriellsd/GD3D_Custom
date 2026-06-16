@@ -1,5 +1,5 @@
 ﻿/**
- * Loader AMF bÃ¡sico (mesh triangular).
+ * Loader AMF básico (mesh triangular).
  */
 import * as THREE from "three";
 
@@ -56,7 +56,7 @@ export function carregarAmf(buffer) {
     }
   }
 
-  if (!posicoes.length) throw new Error("AMF sem geometria vÃ¡lida");
+  if (!posicoes.length) throw new Error("AMF sem geometria válida");
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(posicoes, 3));

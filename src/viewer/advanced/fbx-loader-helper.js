@@ -1,5 +1,5 @@
 ﻿/**
- * Carregamento FBX com texturas embutidas ou arquivos companheiros (.png, .jpgâ€¦).
+ * Carregamento FBX com texturas embutidas ou arquivos companheiros (.png, .jpg⬦).
  */
 import * as THREE from "three";
 import { FBXLoader } from "./FBXLoader.js";
@@ -48,7 +48,7 @@ function registrarArquivo(urlsPorNome, arquivo, url) {
 export function carregarFbx(arquivos) {
   const lista = Array.isArray(arquivos) ? arquivos : [arquivos];
   const fbxFile = lista.find((f) => f.name.toLowerCase().endsWith(".fbx"));
-  if (!fbxFile) throw new Error("Arquivo FBX nÃ£o encontrado");
+  if (!fbxFile) throw new Error("Arquivo FBX não encontrado");
 
   const urlsPorNome = new Map();
   const urlsCriadas = [];
