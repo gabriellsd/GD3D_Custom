@@ -1,21 +1,18 @@
 import { jsonResponse, parseCookieHeader, verifySessionToken } from '../../lib/auth-token.mjs';
-import { withApiHandler } from '../../lib/api-util.mjs';
 
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'edge' };
 
-async function handler(request) {
-  if (request.method !== 'GET') {
-    return jsonResponse({ error: 'Método não permitido' }, 405);
+export default async function handler(request) {
+  try {
+    if (request.method !== 'GET') {
+      return jsonResponse({ error: 'Método não permitido' }, 405);
+    }
+
+    const token = parseCookieHeader(request.headers.get('cookie'));
+    const user = await verifySessionToken(token);
+    return jsonResponse({ user: user ?? null }, 200);
+  } catch (err) {
+    console.error('[api/auth/me]', err);
+    return jsonResponse({ error: 'Erro interno do servidor.' }, 500);
   }
-
-  const token = parseCookieHeader(request.headers.get('cookie'));
-  const user = await verifySessionToken(token);
-
-  if (!user) {
-    return jsonResponse({ user: null }, 200);
-  }
-
-  return jsonResponse({ user });
 }
-
-export default withApiHandler(handler);
