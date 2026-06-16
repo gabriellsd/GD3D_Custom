@@ -1,15 +1,14 @@
-import { clearSessionCookie, jsonResponse } from '../../lib/auth-token.mjs';
+import { clearSessionCookie } from '../../lib/auth-token.mjs';
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(request) {
+export default async function handler(req, res) {
   try {
-    if (request.method !== 'POST') {
-      return jsonResponse({ error: 'Método não permitido' }, 405);
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Método não permitido' });
     }
-    return jsonResponse({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
+    res.setHeader('Set-Cookie', clearSessionCookie());
+    return res.status(200).json({ ok: true });
   } catch (err) {
     console.error('[api/auth/logout]', err);
-    return jsonResponse({ error: 'Erro interno do servidor.' }, 500);
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }

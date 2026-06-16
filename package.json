@@ -12,6 +12,7 @@
     "prebuild": "node scripts/sync-products.mjs",
     "dev": "vite",
     "build": "vite build",
+    "vercel-build": "vite build",
     "preview": "vite preview",
     "admin:server": "python server/visualizador_web.py",
     "admin:desktop": "python server/visualizador_desktop.py",

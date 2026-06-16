@@ -1,7 +1,3 @@
-export const config = { runtime: 'edge' };
-
-export default function handler() {
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+export default function handler(_req, res) {
+  res.status(200).json({ ok: true });
 }

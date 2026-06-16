@@ -1,44 +1,37 @@
-import { createSessionToken, jsonResponse, sessionCookie } from '../../lib/auth-token.mjs';
+import { createSessionToken, sessionCookie } from '../../lib/auth-token.mjs';
 import { verifySupabaseAccessToken, isSupabaseServerConfigured } from '../../lib/supabase-jwt.mjs';
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(request) {
+export default async function handler(req, res) {
   try {
     if (!isSupabaseServerConfigured()) {
-      return jsonResponse({ error: 'Supabase não configurado no servidor.' }, 503);
+      return res.status(503).json({ error: 'Supabase não configurado no servidor.' });
     }
 
-    if (request.method !== 'POST') {
-      return jsonResponse({ error: 'Método não permitido' }, 405);
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Método não permitido' });
     }
 
-    const authHeader = request.headers.get('authorization') || '';
+    const authHeader = req.headers.authorization || '';
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
     let accessToken = bearer;
-    if (!accessToken) {
-      try {
-        const body = await request.json();
-        accessToken = body.access_token;
-      } catch {
-        accessToken = null;
-      }
+    if (!accessToken && req.body) {
+      accessToken = req.body.access_token;
     }
 
     const user = await verifySupabaseAccessToken(accessToken);
     if (!user) {
-      return jsonResponse({ error: 'Sessão Supabase inválida.' }, 401);
+      return res.status(401).json({ error: 'Sessão Supabase inválida.' });
     }
 
     const token = await createSessionToken(user);
-    return jsonResponse({ user }, 200, { 'Set-Cookie': sessionCookie(token) });
+    res.setHeader('Set-Cookie', sessionCookie(token));
+    return res.status(200).json({ user });
   } catch (err) {
     console.error('[api/auth/supabase-sync]', err);
-    const msg =
-      err?.message?.includes('AUTH_SECRET')
-        ? 'Servidor sem AUTH_SECRET configurado.'
-        : 'Erro interno do servidor.';
-    return jsonResponse({ error: msg }, 500);
+    const msg = err?.message?.includes('AUTH_SECRET')
+      ? 'Servidor sem AUTH_SECRET configurado.'
+      : 'Erro interno do servidor.';
+    return res.status(500).json({ error: msg });
   }
 }
