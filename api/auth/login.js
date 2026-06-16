@@ -1,14 +1,14 @@
 import {
   authenticate,
-  clearSessionCookie,
   createSessionToken,
   jsonResponse,
-  parseCookieHeader,
   sessionCookie,
-  verifySessionToken,
-} from '../../lib/auth.mjs';
+} from '../../lib/auth-users.mjs';
+import { withApiHandler } from '../../lib/api-util.mjs';
 
-export default async function handler(request) {
+export const config = { runtime: 'nodejs20.x' };
+
+async function handler(request) {
   if (request.method !== 'POST') {
     return jsonResponse({ error: 'Método não permitido' }, 405);
   }
@@ -28,7 +28,12 @@ export default async function handler(request) {
   const requiredRole = body.requiredRole;
   if (requiredRole && user.role !== requiredRole) {
     return jsonResponse(
-      { error: requiredRole === 'admin' ? 'Esta área é só para administradores.' : 'Acesso negado.' },
+      {
+        error:
+          requiredRole === 'admin'
+            ? 'Esta área é só para administradores.'
+            : 'Acesso negado.',
+      },
       403
     );
   }
@@ -40,3 +45,5 @@ export default async function handler(request) {
     { 'Set-Cookie': sessionCookie(token) }
   );
 }
+
+export default withApiHandler(handler);

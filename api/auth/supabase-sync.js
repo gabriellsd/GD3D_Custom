@@ -1,7 +1,10 @@
 import { createSessionToken, jsonResponse, sessionCookie } from '../../lib/auth-token.mjs';
 import { verifySupabaseAccessToken, isSupabaseServerConfigured } from '../../lib/supabase-jwt.mjs';
+import { withApiHandler } from '../../lib/api-util.mjs';
 
-export default async function handler(request) {
+export const config = { runtime: 'nodejs20.x' };
+
+async function handler(request) {
   if (!isSupabaseServerConfigured()) {
     return jsonResponse({ error: 'Supabase não configurado no servidor.' }, 503);
   }
@@ -31,3 +34,5 @@ export default async function handler(request) {
   const token = await createSessionToken(user);
   return jsonResponse({ user }, 200, { 'Set-Cookie': sessionCookie(token) });
 }
+
+export default withApiHandler(handler);

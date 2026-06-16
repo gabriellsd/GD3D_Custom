@@ -1,6 +1,9 @@
-import { jsonResponse, parseCookieHeader, verifySessionToken } from '../../lib/auth.mjs';
+import { jsonResponse, parseCookieHeader, verifySessionToken } from '../../lib/auth-token.mjs';
+import { withApiHandler } from '../../lib/api-util.mjs';
 
-export default async function handler(request) {
+export const config = { runtime: 'nodejs20.x' };
+
+async function handler(request) {
   if (request.method !== 'GET') {
     return jsonResponse({ error: 'Método não permitido' }, 405);
   }
@@ -14,3 +17,5 @@ export default async function handler(request) {
 
   return jsonResponse({ user });
 }
+
+export default withApiHandler(handler);
