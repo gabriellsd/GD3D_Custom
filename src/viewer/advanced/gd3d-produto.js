@@ -12,7 +12,7 @@ export function obterProduto(id) {
 
 export function urlModelo(product) {
   if (!product) return null;
-  return product.model3mfUrl || product.modelUrl || null;
+  return product.modelGlbUrl || product.model3mfUrl || product.modelUrl || null;
 }
 
 function aplicarRotacao(modelPivot, product) {

@@ -34,6 +34,7 @@ export function rowToProduct(row) {
   if (row.preview_image) product.previewImage = row.preview_image;
   if (row.preview_images?.length) product.previewImages = row.preview_images;
   if (row.model_url) product.modelUrl = row.model_url;
+  if (row.model_glb_url) product.modelGlbUrl = row.model_glb_url;
   if (row.model3mf_url) product.model3mfUrl = row.model3mf_url;
   if (row.colors?.length) product.colors = row.colors;
   if (row.sizes?.length) product.sizes = row.sizes;
@@ -69,6 +70,7 @@ export function productToRow(product) {
     preview_image: product.previewImage || null,
     preview_images: product.previewImages || [],
     model_url: product.modelUrl || null,
+    model_glb_url: product.modelGlbUrl || null,
     model3mf_url: product.model3mfUrl || null,
     colors: product.colors || [],
     model_color: product.modelColor || null,
@@ -100,6 +102,16 @@ export async function getNextProductId(supabase) {
 
   if (error) throw error;
   return (data?.id ?? 0) + 1;
+}
+
+export async function slugExists(supabase, { category, subcategory, slug }) {
+  let query = supabase.from('products').select('id').eq('category', category).eq('slug', slug);
+  if (subcategory) query = query.eq('subcategory', subcategory);
+  else query = query.is('subcategory', null);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function uploadProductAsset(supabase, file, productRow) {

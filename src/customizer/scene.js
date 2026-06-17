@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { load3mfObject, loadStlGeometry } from '../shop/card-preview-3d.js';
+import { loadGlbObject } from '../viewer/glb-loader.js';
 import { WHATSAPP_PHONE } from '../config.js';
 import { formatBRL } from '../utils/format.js';
 
@@ -177,7 +178,7 @@ export function selectProduct(product) {
   updateViewerLabel(product);
   updateViewerColorSwatches(product.colors);
 
-  if (product.model3mfUrl || product.modelUrl) {
+  if (product.modelGlbUrl || product.model3mfUrl || product.modelUrl) {
     hideTurntable();
     loadModel3d(product, generation);
     return;
@@ -218,7 +219,9 @@ function getModelCenter() {
 }
 
 function hasProductModel3d() {
-  return Boolean(selectedProduct?.modelUrl || selectedProduct?.model3mfUrl);
+  return Boolean(
+    selectedProduct?.modelGlbUrl || selectedProduct?.model3mfUrl || selectedProduct?.modelUrl
+  );
 }
 
 function getProductRotateSpeed() {
@@ -346,11 +349,16 @@ function setLoading(visible) {
 }
 
 function loadModel3d(product, generation) {
+  const urlGlb =
+    product.modelGlbUrl ||
+    (product.modelUrl?.toLowerCase().endsWith('.glb') ? product.modelUrl : null);
   const url3mf =
     product.model3mfUrl ||
     (product.modelUrl?.toLowerCase().endsWith('.3mf') ? product.modelUrl : null);
 
-  if (url3mf) {
+  if (urlGlb) {
+    loadGlbModel(product, urlGlb, generation);
+  } else if (url3mf) {
     load3mfModel(product, url3mf, generation);
   } else {
     loadStlModel(product, generation);
@@ -366,7 +374,7 @@ function onModelLoadError(product, generation) {
     modelUrl: product.modelUrl,
   });
 
-  if (product.model3mfUrl || product.modelUrl) {
+  if (product.modelGlbUrl || product.model3mfUrl || product.modelUrl) {
     showModelError();
     const hint = document.getElementById('viewer-drag-hint');
     if (hint) hint.textContent = 'Modelo 3D indisponível — use «Tentar novamente» ou atualize a página (Ctrl+F5)';
@@ -381,6 +389,69 @@ function onModelLoadError(product, generation) {
     hideTurntable();
     loadGeometricModel(product.shape3d || 'box');
   }
+}
+
+function loadGlbModel(product, url, generation) {
+  setLoading(true);
+  hideModelError();
+
+  loadGlbObject(url)
+    .then((object) => {
+      if (generation !== loadGeneration) return;
+      setLoading(false);
+      hideTurntable();
+      hideModelError();
+      applyGlbObject(object, product);
+      setViewerHint3d();
+    })
+    .catch((err) => {
+      if (generation !== loadGeneration) return;
+      console.warn('Visualizador: GLB', err);
+      const url3mf = product.model3mfUrl;
+      if (url3mf) {
+        load3mfModel(product, url3mf, generation);
+        return;
+      }
+      if (product.modelUrl?.toLowerCase().endsWith('.stl')) {
+        loadStlModel(product, generation);
+        return;
+      }
+      onModelLoadError(product, generation);
+    });
+}
+
+function applyGlbObject(object, product) {
+  clearModel();
+  activeMesh = null;
+
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    child.geometry?.computeVertexNormals();
+    polishMeshMaterial(child);
+  });
+
+  const rot = product.modelRotation ?? { x: 0, y: 0, z: 0 };
+  object.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+
+  const content = new THREE.Group();
+  content.add(object);
+
+  const box = new THREE.Box3().setFromObject(content);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+  content.scale.setScalar(2.8 / maxDim);
+
+  content.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(content);
+  const center = fitted.getCenter(new THREE.Vector3());
+  content.position.x -= center.x;
+  content.position.z -= center.z;
+  content.position.y -= fitted.min.y;
+
+  const facing = product.modelFacing ?? 0;
+  createModelPivot(content, facing);
+  fitCameraToMesh();
+  publishProductColors([]);
 }
 
 function load3mfModel(product, url, generation) {

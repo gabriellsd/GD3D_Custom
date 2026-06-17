@@ -310,16 +310,22 @@ export function initExtensoes(app) {
     }
 
     if (ext === "step" || ext === "stp") {
-      const form = new FormData();
-      form.append("arquivo", file);
-      const res = await fetch("/api/converter-step", { method: "POST", body: form });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Conversão STEP falhou");
+      try {
+        const { carregarStep } = await import("./step-loader.js");
+        const buffer = await file.arrayBuffer();
+        return { object: await carregarStep(buffer), extras: {} };
+      } catch (err) {
+        const form = new FormData();
+        form.append("arquivo", file);
+        const res = await fetch("/api/converter-step", { method: "POST", body: form });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.detail || body.error || err.message || "Conversão STEP falhou");
+        }
+        const blob = await res.blob();
+        const stlFile = new File([blob], file.name.replace(/\.(step|stp)$/i, ".stl"));
+        return carregarEstendido(stlFile, [stlFile], loaders);
       }
-      const blob = await res.blob();
-      const stlFile = new File([blob], file.name.replace(/\.(step|stp)$/i, ".stl"));
-      return carregarEstendido(stlFile, [stlFile], loaders);
     }
 
     if (ext === "glb" || ext === "gltf") {

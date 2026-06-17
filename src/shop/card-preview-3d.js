@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { resolveProductAssetUrl } from '../utils/asset-url.js';
 import { loadBambuPaint3mf } from '../viewer/bambu3mfLoader.js';
+import { loadGlbObject } from '../viewer/glb-loader.js';
 import { buildCardPreviewFallbackHtml } from './gallery.js';
 import { escapeHtml } from './sizes.js';
 
@@ -20,15 +21,21 @@ const object3mfCache = new Map();
 const object3mfInflight = new Map();
 
 function productHasModel(product) {
-  return Boolean(product?.model3mfUrl || product?.modelUrl);
+  return Boolean(product?.modelGlbUrl || product?.model3mfUrl || product?.modelUrl);
 }
 
-/** Cards preferem 3MF multicolor; STL só como fallback. */
+/** GLB leve para web; 3MF multicolor; STL como fallback. */
 function cardPreviewSource(product) {
+  const glb =
+    product.modelGlbUrl ||
+    (product.modelUrl?.toLowerCase().endsWith('.glb') ? product.modelUrl : null);
+  if (glb) return { type: 'glb', url: glb };
+
   const mf =
     product.model3mfUrl ||
     (product.modelUrl?.toLowerCase().endsWith('.3mf') ? product.modelUrl : null);
   if (mf) return { type: '3mf', url: mf };
+
   const stl = product.modelUrl?.toLowerCase().endsWith('.stl') ? product.modelUrl : null;
   if (stl) return { type: 'stl', url: stl };
   return null;
@@ -82,7 +89,8 @@ export function load3mfObject(url) {
 export function prefetchCardModels(products) {
   for (const product of products) {
     const src = cardPreviewSource(product);
-    if (src?.type === 'stl') loadStlGeometry(src.url).catch(() => {});
+    if (src?.type === 'glb') loadGlbObject(src.url).catch(() => {});
+    else if (src?.type === 'stl') loadStlGeometry(src.url).catch(() => {});
     else if (src?.type === '3mf') load3mfObject(src.url).catch(() => {});
   }
 }
@@ -337,7 +345,9 @@ class CardPreview3D {
     }
 
     const task =
-      src.type === 'stl'
+      src.type === 'glb'
+        ? loadGlbObject(src.url).then((object) => fitContent(object, product))
+        : src.type === 'stl'
         ? loadStlGeometry(src.url).then((geometry) => buildMeshFromStlGeometry(geometry, product))
         : load3mfObject(src.url).then((object) => {
             object.traverse((child) => {

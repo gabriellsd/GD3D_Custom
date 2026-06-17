@@ -22,7 +22,7 @@ export function searchProducts(query) {
 }
 
 function productHref(product) {
-  if (product.model3mfUrl || product.modelUrl) {
+  if (product.modelGlbUrl || product.model3mfUrl || product.modelUrl) {
     return `/visualizador.html?produto=${product.id}`;
   }
   return `/produtos.html?q=${encodeURIComponent(product.name)}`;

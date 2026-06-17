@@ -387,13 +387,6 @@ import * as THREE from "three";
       return metadados;
     }
 
-    function paraMetros(valor, origem) {
-      if (origem === "m") return valor;
-      if (origem === "mm") return valor / 1000;
-      if (origem === "cm") return valor / 100;
-      return valor;
-    }
-
     function escolherUnidadeExibicao(maiorDimensaoMetros) {
       return maiorDimensaoMetros >= 1 ? "m" : "cm";
     }

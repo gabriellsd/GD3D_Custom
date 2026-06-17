@@ -8,12 +8,13 @@ import {
   getNextProductId,
   nomeToSlug,
   productToRow,
+  slugExists,
   uploadProductAsset,
 } from '../../data/products-cloud.js';
 import { initProductCatalog } from '../../data/products.js';
-import { capturarPngBlob } from './export-media.js';
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const GLB_WEB_HINT_BYTES = 5 * 1024 * 1024;
 
 function parseSizes(raw) {
   return String(raw || '')
@@ -33,6 +34,19 @@ function extensaoModelo(file) {
   return file?.name?.split('.').pop()?.toLowerCase() || '';
 }
 
+function formatarTamanho(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function expandirSecaoPublicar() {
+  const secao = document.getElementById('secao-publicar');
+  if (!secao) return;
+  secao.classList.add('expanded', 'publicar-pronto');
+  secao.querySelector('.info-section-header')?.setAttribute('aria-expanded', 'true');
+}
+
 export function initPublicarProduto({
   renderer,
   scene,
@@ -49,6 +63,7 @@ export function initPublicarProduto({
   const slugInput = document.getElementById('pub-slug');
   const catList = document.getElementById('pub-categories');
   const subList = document.getElementById('pub-subcategories');
+  const hintEl = secao?.querySelector('.publicar-hint');
 
   if (!form) return null;
 
@@ -87,6 +102,7 @@ export function initPublicarProduto({
   function preencherSugestoes(meta, file) {
     if (!file) {
       setReady(false);
+      if (hintEl) hintEl.textContent = 'Carregue um modelo 3D para criar um produto na loja.';
       return;
     }
 
@@ -106,6 +122,15 @@ export function initPublicarProduto({
       form.elements.desc.value = meta.descricao;
     }
 
+    const ext = extensaoModelo(file);
+    const sizeLabel = formatarTamanho(file.size);
+    let hint = `Ficheiro: ${file.name} (${sizeLabel}, ${ext.toUpperCase()})`;
+    if (ext === 'stl' && file.size > GLB_WEB_HINT_BYTES) {
+      hint += ' — para a loja, exporte também um GLB leve (2–5 MB) na pasta do produto.';
+    }
+    if (hintEl) hintEl.textContent = hint;
+
+    expandirSecaoPublicar();
     setReady(true);
   }
 
@@ -131,7 +156,7 @@ export function initPublicarProduto({
 
     if (file.size > MAX_UPLOAD_BYTES) {
       setStatus(
-        `Ficheiro muito grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). Limite ~50 MB no plano free.`,
+        `Ficheiro muito grande (${formatarTamanho(file.size)}). Limite ~50 MB no plano free.`,
         true
       );
       return;
@@ -147,17 +172,27 @@ export function initPublicarProduto({
     setStatus('A publicar produto na cloud…');
 
     try {
+      const category = form.category.value.trim() || 'Miniaturas';
+      const subcategory = form.subcategory.value.trim() || null;
+      const slug = form.slug.value.trim() || nomeToSlug(form.name.value);
+
+      if (await slugExists(supabase, { category, subcategory, slug })) {
+        throw new Error(
+          `Já existe um produto com slug "${slug}" em ${category}${subcategory ? ` / ${subcategory}` : ''}.`
+        );
+      }
+
       const id = await getNextProductId(supabase);
       const draft = {
         id,
         name: form.name.value.trim(),
         price: Number(form.price.value) || 0,
         sizes: parseSizes(form.sizes.value),
-        category: form.category.value.trim() || 'Miniaturas',
-        subcategory: form.subcategory.value.trim() || undefined,
-        slug: form.slug.value.trim() || nomeToSlug(form.name.value),
+        category,
+        subcategory: subcategory || undefined,
+        slug,
         desc: form.desc.value.trim(),
-        tag: form.category.value.trim() || 'Miniaturas',
+        tag: category,
         published: form.published.checked,
         featured: form.featured.checked,
       };
@@ -167,12 +202,14 @@ export function initPublicarProduto({
       const row = productToRow(draft);
       const ext = extensaoModelo(file);
 
+      const { capturarPngBlob } = await import('./export-media.js');
       const previewBlob = await capturarPngBlob(renderer, scene, getCamera());
       const previewFile = new File([previewBlob], 'preview.png', { type: 'image/png' });
       const previewUrl = await uploadProductAsset(supabase, previewFile, row);
 
       const modelUrl = await uploadProductAsset(supabase, file, row);
-      if (ext === '3mf' || ext === 'mf3') row.model3mf_url = modelUrl;
+      if (ext === 'glb') row.model_glb_url = modelUrl;
+      else if (ext === '3mf' || ext === 'mf3') row.model3mf_url = modelUrl;
       else row.model_url = modelUrl;
 
       if (previewUrl) {
@@ -215,6 +252,7 @@ export function initPublicarProduto({
     onModelCleared() {
       if (statusEl) statusEl.innerHTML = '';
       setReady(false);
+      if (hintEl) hintEl.textContent = 'Carregue um modelo 3D para criar um produto na loja.';
       if (secao) {
         secao.classList.remove('expanded', 'publicar-pronto');
         secao.querySelector('.info-section-header')?.setAttribute('aria-expanded', 'false');

@@ -38,7 +38,7 @@ export function isProductFolder(dir) {
   if (!fs.existsSync(dir)) return false;
   const files = listFiles(dir);
   if (files.some((f) => INFO_TXT_NAMES.includes(f) || f === 'product.json')) return true;
-  return files.some((f) => /\.(png|stl|3mf|mf3)$/i.test(f));
+  return files.some((f) => /\.(png|stl|glb|3mf|mf3)$/i.test(f));
 }
 
 export function listDirs(dir) {
@@ -257,6 +257,7 @@ export function readProductMeta(dir, slug, category) {
 }
 
 export function pickModelFiles(files, slug = '') {
+  const glb = files.find((f) => /\.glb$/i.test(f));
   const stl = files.find((f) => /\.stl$/i.test(f));
   const all3mf = files.filter((f) => /\.3mf$/i.test(f) || /\.mf3$/i.test(f));
   const slugKey = slug.toLowerCase();
@@ -272,16 +273,16 @@ export function pickModelFiles(files, slug = '') {
   if (!model3mf) model3mf = all3mf.find((f) => !f.includes('+'));
   if (!model3mf) model3mf = all3mf.sort((a, b) => a.length - b.length)[0];
 
-  return { stl, model3mf };
+  return { glb, stl, model3mf };
 }
 
 function buildCatalogEntry({ category, subcategory, slug, productPath }) {
   const files = listFiles(productPath);
   const meta = readProductMeta(productPath, slug, category);
   const images = files.filter((f) => /\.png$/i.test(f)).sort();
-  const { stl, model3mf } = pickModelFiles(files, slug);
+  const { glb, stl, model3mf } = pickModelFiles(files, slug);
 
-  if (!images.length && !stl && !model3mf) return null;
+  if (!images.length && !glb && !stl && !model3mf) return null;
 
   const defaults = CATEGORY_DEFAULTS[category] ?? { icon: 'fa-solid fa-cube', tag: 'Produto' };
   const subLabel = subcategory ? humanizeSlug(subcategory) : null;
@@ -305,6 +306,7 @@ function buildCatalogEntry({ category, subcategory, slug, productPath }) {
     entry.previewImages = urls;
   }
 
+  if (glb) entry.modelGlbUrl = productPublicUrl(category, slug, glb, subcategory);
   if (stl) entry.modelUrl = productPublicUrl(category, slug, stl, subcategory);
   if (model3mf) entry.model3mfUrl = productPublicUrl(category, slug, model3mf, subcategory);
 

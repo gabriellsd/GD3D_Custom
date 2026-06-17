@@ -17,6 +17,7 @@ function serveProductAssetsPlugin() {
     '.3mf': 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
     '.stl': 'model/stl',
     '.mf3': 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
+    '.wasm': 'application/wasm',
   };
 
   return {
@@ -139,6 +140,7 @@ export default defineConfig({
     },
   },
   build: {
+    assetsInclude: ['**/*.wasm'],
     rollupOptions: {
       output: {
         manualChunks(id) {
