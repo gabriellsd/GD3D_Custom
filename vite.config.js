@@ -105,6 +105,10 @@ export default defineConfig({
     productsSyncPlugin(),
     vercel(),
   ],
+  vercel: {
+    cleanUrls: false,
+    trailingSlash: false,
+  },
   server: {
     watch: {
       ignored: ['**/node_modules/**'],
