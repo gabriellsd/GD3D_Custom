@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseAuth, mapSupabaseUser, roleFromSupabaseUser } from './supabase.js';
+import { getSupabase, ensureSupabaseConfig, isSupabaseAuth, mapSupabaseUser, roleFromSupabaseUser } from './supabase.js';
 
 let cachedSession = null;
 let sessionPromise = null;
@@ -59,9 +59,11 @@ export async function fetchSession({ force = false } = {}) {
   if (!force && cachedSession !== null) return cachedSession;
   if (!force && sessionPromise) return sessionPromise;
 
-  bindSupabaseAuthListener();
-
-  sessionPromise = (isSupabaseAuth() ? fetchSessionSupabase() : fetchSessionLocal())
+  sessionPromise = ensureSupabaseConfig()
+    .then(() => {
+      bindSupabaseAuthListener();
+      return isSupabaseAuth() ? fetchSessionSupabase() : fetchSessionLocal();
+    })
     .then((user) => {
       cachedSession = user;
       return user;
@@ -127,6 +129,7 @@ async function loginSupabase(email, password, { requiredRole } = {}) {
 }
 
 export async function login(email, password, options = {}) {
+  await ensureSupabaseConfig();
   const user = isSupabaseAuth()
     ? await loginSupabase(email, password, options)
     : await loginLocal(email, password, options);
@@ -137,6 +140,7 @@ export async function login(email, password, options = {}) {
 }
 
 export async function signUp(email, password, { name } = {}) {
+  await ensureSupabaseConfig();
   if (!isSupabaseAuth()) {
     throw new Error('Criar conta está disponível apenas quando o Supabase está configurado.');
   }

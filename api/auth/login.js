@@ -2,8 +2,10 @@ import { readJsonBody } from '../../lib/api-util.mjs';
 import {
   authenticate,
   createSessionToken,
+  loadUsers,
   sessionCookie,
 } from '../../lib/auth-users.mjs';
+import { isSupabaseServerConfigured } from '../../lib/supabase-jwt.mjs';
 
 export default async function handler(req, res) {
   try {
@@ -12,6 +14,14 @@ export default async function handler(req, res) {
     }
 
     const body = await readJsonBody(req);
+
+    if (!isSupabaseServerConfigured() && loadUsers().length === 0) {
+      return res.status(503).json({
+        error:
+          'Autenticação não configurada no servidor. Defina VITE_SUPABASE_* e SUPABASE_JWT_SECRET na Vercel.',
+      });
+    }
+
     const user = authenticate(body.email, body.password);
     if (!user) {
       return res.status(401).json({ error: 'Email ou palavra-passe incorretos' });
