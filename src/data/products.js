@@ -26,7 +26,7 @@ export async function initProductCatalog({ force = false } = {}) {
       if (generation !== catalogGeneration) return PRODUCTS;
 
       if (cloud.length) {
-        PRODUCTS = cloud;
+        PRODUCTS = mergeCloudWithStaticCatalog(cloud, STATIC_PRODUCTS);
       } else {
         console.warn(
           '[catalog] Supabase sem produtos publicados — a manter catálogo estático.'
@@ -40,6 +40,25 @@ export async function initProductCatalog({ force = false } = {}) {
   })();
 
   return catalogPromise;
+}
+
+const CARD_META_KEYS = ['card3mfRotation'];
+
+/** Mantém rotação explícita do card no catálogo estático quando o cloud não a define. */
+function mergeCloudWithStaticCatalog(cloudProducts, staticProducts) {
+  const staticById = new Map(staticProducts.map((p) => [p.id, p]));
+  return cloudProducts.map((cloud) => {
+    const local = staticById.get(cloud.id);
+    if (!local) return cloud;
+
+    const merged = { ...cloud };
+    for (const key of CARD_META_KEYS) {
+      if (local[key] != null && merged[key] == null) {
+        merged[key] = local[key];
+      }
+    }
+    return merged;
+  });
 }
 
 export function resetProductCatalogForTests() {

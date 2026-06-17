@@ -61,17 +61,17 @@ export const CATALOG_PRODUCTS = [
   },
   modelFacing: 3.141592653589793,
   model3mfRotation: {
-    x: 0,
-    y: 3.141592653589793,
+    x: -1.5707963267948966,
+    y: 0,
     z: 0
   },
-  model3mfFacing: 3.141592653589793,
+  model3mfFacing: 0,
   card3mfRotation: {
-    x: 0,
-    y: 3.141592653589793,
+    x: -1.5707963267948966,
+    y: 0,
     z: 0
   },
-  card3mfFacing: 3.141592653589793
+  card3mfFacing: 0
   },
   {
   id: 5,
@@ -97,12 +97,7 @@ export const CATALOG_PRODUCTS = [
     z: 0
   },
   modelFacing: 3.141592653589793,
-  model3mfRotation: {
-    x: 0,
-    y: 0,
-    z: 0
-  },
-  model3mfFacing: 3.141592653589793,
-  card3mfFacing: 3.141592653589793
+  model3mfFacing: 0,
+  card3mfFacing: 0
   }
 ];

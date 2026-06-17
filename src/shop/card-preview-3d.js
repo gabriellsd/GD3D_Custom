@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { resolveProductAssetUrl } from '../utils/asset-url.js';
-import { loadBambuPaint3mf } from '../viewer/bambu3mfLoader.js';
+import { parseBambu3mfBuffer } from '../viewer/bambu3mfLoader.js';
 import { loadGlbObject } from '../viewer/glb-loader.js';
+import {
+  resolveDisplayRotation,
+} from '../viewer/stand-up-orientation.js';
 import { buildCardPreviewFallbackHtml } from './gallery.js';
 import { escapeHtml } from './sizes.js';
 
 const CARD_SPIN_SPEED = 0.55;
 const BG = '#141414';
 
-/** Pose padrão dos cards — alinhada ao visualizador (vista frontal). */
-const CARD_3MF_ROTATION = { x: 0, y: 0, z: 0 };
 const CARD_CAMERA = { yFactor: 0.35, distanceFactor: 2.1 };
 const CARD_SCALE = 2.4;
 const stlLoader = new STLLoader();
@@ -64,25 +65,28 @@ export function loadStlGeometry(url) {
   return promise;
 }
 
-export function load3mfObject(url) {
-  if (object3mfCache.has(url)) {
-    return Promise.resolve(object3mfCache.get(url).clone(true));
+export function load3mfObject(url, options = {}) {
+  const cacheKey = `${url}\0${JSON.stringify(options)}`;
+  if (object3mfCache.has(cacheKey)) {
+    return Promise.resolve(object3mfCache.get(cacheKey).clone(true));
   }
-  if (object3mfInflight.has(url)) return object3mfInflight.get(url);
+  if (object3mfInflight.has(cacheKey)) return object3mfInflight.get(cacheKey);
 
   const promise = new Promise((resolve, reject) => {
-    loadBambuPaint3mf(
-      url,
-      (object) => {
-        object3mfCache.set(url, object);
+    fetch(resolveProductAssetUrl(url))
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((buffer) => {
+        const object = parseBambu3mfBuffer(buffer, options);
+        object3mfCache.set(cacheKey, object);
         resolve(object.clone(true));
-      },
-      undefined,
-      reject
-    );
-  }).finally(() => object3mfInflight.delete(url));
+      })
+      .catch(reject);
+  }).finally(() => object3mfInflight.delete(cacheKey));
 
-  object3mfInflight.set(url, promise);
+  object3mfInflight.set(cacheKey, promise);
   return promise;
 }
 
@@ -95,18 +99,18 @@ export function prefetchCardModels(products) {
   }
 }
 
-function getCard3mfRotation(product) {
-  return product.card3mfRotation ?? product.model3mfRotation ?? CARD_3MF_ROTATION;
+function getCard3mfRotation(product, object, source = 'print') {
+  return resolveDisplayRotation(object, product.card3mfRotation, { source });
 }
 
 function getCard3mfFacing(product) {
-  if (product.card3mfFacing != null) return product.card3mfFacing;
-  return product.model3mfFacing ?? product.modelFacing ?? 0;
+  return product.card3mfFacing ?? 0;
 }
 
-function fitContent(object, product) {
-  const rot = getCard3mfRotation(product);
+function fitContent(object, product, source = 'print') {
+  const rot = getCard3mfRotation(product, object, source);
   object.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+  object.updateMatrixWorld(true);
 
   const content = new THREE.Group();
   content.add(object);
@@ -155,22 +159,25 @@ function buildMeshFromStlGeometry(geometry, product) {
   const mesh = new THREE.Mesh(geometry);
   polishStlMesh(mesh, product.modelColor);
 
-  const rotX = product.modelRotation?.x ?? -Math.PI / 2;
-  mesh.rotation.set(rotX, product.modelRotation?.y ?? 0, product.modelRotation?.z ?? 0);
+  const wrap = new THREE.Group();
+  wrap.add(mesh);
+  const rot = getCard3mfRotation(product, wrap, 'print');
+  wrap.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+  wrap.updateMatrixWorld(true);
 
-  const box = new THREE.Box3().setFromObject(mesh);
+  const box = new THREE.Box3().setFromObject(wrap);
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-  mesh.scale.setScalar(CARD_SCALE / maxDim);
-  mesh.updateMatrixWorld(true);
-  const fitted = new THREE.Box3().setFromObject(mesh);
+  wrap.scale.setScalar(CARD_SCALE / maxDim);
+  wrap.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(wrap);
   const center = fitted.getCenter(new THREE.Vector3());
-  mesh.position.x -= center.x;
-  mesh.position.z -= center.z;
-  mesh.position.y -= fitted.min.y;
+  wrap.position.x -= center.x;
+  wrap.position.z -= center.z;
+  wrap.position.y -= fitted.min.y;
 
   const meshWrap = new THREE.Group();
-  meshWrap.add(mesh);
+  meshWrap.add(wrap);
 
   const orient = new THREE.Group();
   orient.rotation.y = getCard3mfFacing(product);
@@ -346,7 +353,7 @@ class CardPreview3D {
 
     const task =
       src.type === 'glb'
-        ? loadGlbObject(src.url).then((object) => fitContent(object, product))
+        ? loadGlbObject(src.url).then((object) => fitContent(object, product, 'gltf'))
         : src.type === 'stl'
         ? loadStlGeometry(src.url).then((geometry) => buildMeshFromStlGeometry(geometry, product))
         : load3mfObject(src.url).then((object) => {
@@ -355,7 +362,7 @@ class CardPreview3D {
               child.geometry?.computeVertexNormals();
               polishBambuMesh(child);
             });
-            return fitContent(object, product);
+            return fitContent(object, product, 'print');
           });
 
     task

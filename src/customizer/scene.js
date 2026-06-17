@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { load3mfObject, loadStlGeometry } from '../shop/card-preview-3d.js';
+import { resolveDisplayRotation } from '../viewer/stand-up-orientation.js';
 import { loadGlbObject } from '../viewer/glb-loader.js';
 import { WHATSAPP_PHONE } from '../config.js';
 import { formatBRL } from '../utils/format.js';
@@ -430,8 +431,9 @@ function applyGlbObject(object, product) {
     polishMeshMaterial(child);
   });
 
-  const rot = product.modelRotation ?? { x: 0, y: 0, z: 0 };
+  const rot = resolveDisplayRotation(object, product.modelRotation, { source: 'gltf' });
   object.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+  object.updateMatrixWorld(true);
 
   const content = new THREE.Group();
   content.add(object);
@@ -525,8 +527,9 @@ function apply3mfObject(object, product) {
     else polishMeshMaterial(child);
   });
 
-  const rot = product.model3mfRotation ?? { x: 0, y: 0, z: 0 };
+  const rot = resolveDisplayRotation(object, product.model3mfRotation, { source: 'print' });
   object.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+  object.updateMatrixWorld(true);
 
   const content = new THREE.Group();
   content.add(object);
@@ -592,22 +595,25 @@ function applyStlGeometry(geometry, colorHex, rotation = {}, facingY = 0) {
   modelPivot = new THREE.Group();
   activeMesh = new THREE.Mesh(geometry, material);
 
-  const rotX = rotation.x ?? -Math.PI / 2;
-  activeMesh.rotation.set(rotX, rotation.y ?? 0, rotation.z ?? 0);
+  const wrap = new THREE.Group();
+  wrap.add(activeMesh);
+  const rot = resolveDisplayRotation(wrap, rotation, { source: 'print' });
+  wrap.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
+  wrap.updateMatrixWorld(true);
 
-  const box = new THREE.Box3().setFromObject(activeMesh);
+  const box = new THREE.Box3().setFromObject(wrap);
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  activeMesh.scale.setScalar(2.8 / maxDim);
+  wrap.scale.setScalar(2.8 / maxDim);
 
-  activeMesh.updateMatrixWorld(true);
-  const fitted = new THREE.Box3().setFromObject(activeMesh);
+  wrap.updateMatrixWorld(true);
+  const fitted = new THREE.Box3().setFromObject(wrap);
   const center = fitted.getCenter(new THREE.Vector3());
-  activeMesh.position.x -= center.x;
-  activeMesh.position.z -= center.z;
-  activeMesh.position.y -= fitted.min.y;
+  wrap.position.x -= center.x;
+  wrap.position.z -= center.z;
+  wrap.position.y -= fitted.min.y;
 
-  createModelPivot(activeMesh, facingY);
+  createModelPivot(wrap, facingY);
   fitCameraToMesh();
   publishProductColors([colorHex.startsWith('#') ? colorHex.toUpperCase() : `#${colorHex}`.toUpperCase()]);
 }
