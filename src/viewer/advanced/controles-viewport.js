@@ -31,6 +31,10 @@ export function montarControlesViewport(container) {
       ).join("")}
     </div>
     <div class="barra-ferramentas" role="toolbar" aria-label="Ferramentas">
+      <button type="button" class="barra-vistas-btn barra-ferramentas-toggle" title="Ferramentas" aria-expanded="false" aria-label="Abrir ferramentas">
+        <i class="fa-solid fa-camera" aria-hidden="true"></i>
+      </button>
+      <div class="barra-ferramentas-itens">
       <button type="button" class="barra-vistas-btn" id="btn-screenshot" title="Captura (S)">
         <i class="fa-solid fa-camera" aria-hidden="true"></i>
       </button>
@@ -50,9 +54,40 @@ export function montarControlesViewport(container) {
       <button type="button" class="barra-vistas-btn" id="btn-compartilhar" title="Compartilhar sessão">
         <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
       </button>
+      </div>
     </div>`;
 
   container.appendChild(barra);
+
+  const ferramentas = barra.querySelector(".barra-ferramentas");
+  const toggle = barra.querySelector(".barra-ferramentas-toggle");
+  let fecharTimer = null;
+
+  function setAberta(aberta) {
+    ferramentas?.classList.toggle("barra-ferramentas-aberta", aberta);
+    toggle?.setAttribute("aria-expanded", aberta ? "true" : "false");
+  }
+
+  toggle?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setAberta(!ferramentas?.classList.contains("barra-ferramentas-aberta"));
+  });
+
+  ferramentas?.addEventListener("mouseenter", () => {
+    if (fecharTimer) clearTimeout(fecharTimer);
+    setAberta(true);
+  });
+
+  ferramentas?.addEventListener("mouseleave", () => {
+    fecharTimer = setTimeout(() => setAberta(false), 320);
+  });
+
+  document.addEventListener("pointerdown", (e) => {
+    if (!ferramentas?.classList.contains("barra-ferramentas-aberta")) return;
+    if (ferramentas.contains(e.target)) return;
+    setAberta(false);
+  });
 }
 
 export function sincronizarToggleMesa(ativo) {

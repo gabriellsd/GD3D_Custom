@@ -1001,13 +1001,72 @@ body[data-tema="claro"] .viewer-advanced-root aside {
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: 0;
+  padding: 6px;
   background: rgba(72, 72, 72, 0.92);
   border-radius: 999px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(8px);
   max-width: min(100%, 420px);
+  transition: gap 0.22s ease, padding 0.22s ease;
+}
+
+.barra-ferramentas-itens {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    max-width 0.28s ease,
+    opacity 0.2s ease;
+}
+
+.barra-ferramentas-toggle {
+  flex-shrink: 0;
+}
+
+.barra-ferramentas:hover,
+.barra-ferramentas.barra-ferramentas-aberta {
+  gap: 4px;
+  padding: 6px 10px 6px 6px;
+}
+
+.barra-ferramentas:hover .barra-ferramentas-itens,
+.barra-ferramentas.barra-ferramentas-aberta .barra-ferramentas-itens {
+  max-width: 280px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.barra-ferramentas:hover .barra-ferramentas-toggle,
+.barra-ferramentas.barra-ferramentas-aberta .barra-ferramentas-toggle {
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (hover: none) {
+  .barra-ferramentas-itens {
+    max-width: 280px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .barra-ferramentas-toggle {
+    display: none;
+  }
+
+  .barra-ferramentas {
+    gap: 4px;
+    padding: 6px 10px 6px 6px;
+  }
 }
 
 @media (max-width: 960px) {
