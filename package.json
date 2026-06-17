@@ -18,6 +18,7 @@
     "admin:desktop": "python server/visualizador_desktop.py",
     "supabase:setup": "node scripts/supabase-env-setup.mjs",
     "supabase:check": "node scripts/check-supabase.mjs",
+    "vercel:env": "node scripts/vercel-env-sync.mjs",
     "catalog:seed": "node scripts/seed-supabase-catalog.mjs"
   },
   "dependencies": {
