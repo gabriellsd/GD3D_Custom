@@ -17,14 +17,18 @@ const PRESENTATION_KEYS = [
   'card3mfFacing',
 ];
 
+const CARD_PRESENTATION_KEYS = ['card3mfRotation', 'card3mfFacing'];
+
 function mergeStaticPresentation(cloudProduct) {
   const local = STATIC_BY_ID.get(cloudProduct.id);
   if (!local) return cloudProduct;
 
   const merged = { ...cloudProduct };
   for (const key of PRESENTATION_KEYS) {
-    if (merged[key] == null && local[key] != null) {
+    if (local[key] != null) {
       merged[key] = local[key];
+    } else if (CARD_PRESENTATION_KEYS.includes(key)) {
+      delete merged[key];
     }
   }
   return merged;
