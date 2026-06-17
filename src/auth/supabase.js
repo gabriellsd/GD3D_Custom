@@ -50,7 +50,7 @@ export function getSupabase() {
 /** Papel: app_metadata.role (preferido) ou user_metadata.role. */
 export function roleFromSupabaseUser(user) {
   if (!user) return null;
-  const role = user.app_metadata?.role;
+  const role = user.app_metadata?.role ?? user.user_metadata?.role;
   if (role === 'admin' || role === 'client') return role;
   return 'client';
 }

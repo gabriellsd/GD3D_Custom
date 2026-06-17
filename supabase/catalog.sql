@@ -23,7 +23,6 @@ create table if not exists public.products (
   preview_image text,
   preview_images jsonb default '[]'::jsonb,
   model_url text,
-  model_glb_url text,
   model3mf_url text,
   colors jsonb default '[]'::jsonb,
   model_color text,

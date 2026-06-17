@@ -1,9 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { readFilamentColorsFrom3mfFile } from './bambu-colors.mjs';
-import { nomeToSlug as nomeToFolderSlug } from '../lib/slug.mjs';
-
-export { nomeToFolderSlug };
 
 export const PRODUCTS_ROOT = path.join(process.cwd(), 'public', 'products');
 
@@ -21,7 +18,15 @@ export function humanizeSlug(slug) {
 }
 
 /** Slug de pasta a partir do campo `nome` do info.txt */
-export { nomeToFolderSlug as nomeToSlug };
+export function nomeToFolderSlug(nome) {
+  return String(nome)
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96);
+}
 
 export function productPublicUrl(category, slug, fileName = '', subcategory = null) {
   const segments = [category, subcategory, slug].filter(Boolean).map((s) => encodeURIComponent(s));
@@ -38,7 +43,7 @@ export function isProductFolder(dir) {
   if (!fs.existsSync(dir)) return false;
   const files = listFiles(dir);
   if (files.some((f) => INFO_TXT_NAMES.includes(f) || f === 'product.json')) return true;
-  return files.some((f) => /\.(png|stl|glb|3mf|mf3)$/i.test(f));
+  return files.some((f) => /\.(png|stl|3mf|mf3)$/i.test(f));
 }
 
 export function listDirs(dir) {
@@ -227,14 +232,9 @@ export function readProductMeta(dir, slug, category) {
   const fromTxt = readProductTxt(dir);
 
   const metaPath = path.join(dir, 'product.json');
-  let fromJson = {};
-  if (fs.existsSync(metaPath)) {
-    try {
-      fromJson = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    } catch (err) {
-      console.warn(`[products] product.json inválido em ${dir}: ${err.message}`);
-    }
-  }
+  const fromJson = fs.existsSync(metaPath)
+    ? JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+    : {};
 
   return {
     ...base,
@@ -257,7 +257,6 @@ export function readProductMeta(dir, slug, category) {
 }
 
 export function pickModelFiles(files, slug = '') {
-  const glb = files.find((f) => /\.glb$/i.test(f));
   const stl = files.find((f) => /\.stl$/i.test(f));
   const all3mf = files.filter((f) => /\.3mf$/i.test(f) || /\.mf3$/i.test(f));
   const slugKey = slug.toLowerCase();
@@ -273,16 +272,16 @@ export function pickModelFiles(files, slug = '') {
   if (!model3mf) model3mf = all3mf.find((f) => !f.includes('+'));
   if (!model3mf) model3mf = all3mf.sort((a, b) => a.length - b.length)[0];
 
-  return { glb, stl, model3mf };
+  return { stl, model3mf };
 }
 
 function buildCatalogEntry({ category, subcategory, slug, productPath }) {
   const files = listFiles(productPath);
   const meta = readProductMeta(productPath, slug, category);
   const images = files.filter((f) => /\.png$/i.test(f)).sort();
-  const { glb, stl, model3mf } = pickModelFiles(files, slug);
+  const { stl, model3mf } = pickModelFiles(files, slug);
 
-  if (!images.length && !glb && !stl && !model3mf) return null;
+  if (!images.length && !stl && !model3mf) return null;
 
   const defaults = CATEGORY_DEFAULTS[category] ?? { icon: 'fa-solid fa-cube', tag: 'Produto' };
   const subLabel = subcategory ? humanizeSlug(subcategory) : null;
@@ -306,7 +305,6 @@ function buildCatalogEntry({ category, subcategory, slug, productPath }) {
     entry.previewImages = urls;
   }
 
-  if (glb) entry.modelGlbUrl = productPublicUrl(category, slug, glb, subcategory);
   if (stl) entry.modelUrl = productPublicUrl(category, slug, stl, subcategory);
   if (model3mf) entry.model3mfUrl = productPublicUrl(category, slug, model3mf, subcategory);
 

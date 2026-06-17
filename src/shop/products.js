@@ -99,7 +99,7 @@ function goToProduct3d(productId) {
   const product = PRODUCTS.find((p) => p.id === productId);
   if (!product) return;
 
-  if (product.modelGlbUrl || product.model3mfUrl || product.modelUrl) {
+  if (product.model3mfUrl || product.modelUrl) {
     window.location.href = `/visualizador.html?produto=${productId}`;
     return;
   }

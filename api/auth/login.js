@@ -1,5 +1,4 @@
 import { readJsonBody } from '../../lib/api-util.mjs';
-import { checkRateLimit, clientIp } from '../../lib/rate-limit.mjs';
 import {
   authenticate,
   createSessionToken,
@@ -12,14 +11,6 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Método não permitido' });
-    }
-
-    if (!checkRateLimit(`login:${clientIp(req)}`, { limit: 20, windowMs: 60_000 })) {
-      return res.status(429).json({ error: 'Demasiadas tentativas. Aguarde um minuto.' });
-    }
-
-    if (isSupabaseServerConfigured()) {
-      return res.status(410).json({ error: 'Use autenticação Supabase neste site.' });
     }
 
     const body = await readJsonBody(req);
@@ -53,12 +44,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[api/auth/login]', err);
-    if (err?.statusCode === 413) {
-      return res.status(413).json({ error: 'Pedido demasiado grande.' });
-    }
-    if (err?.statusCode === 400) {
-      return res.status(400).json({ error: 'JSON inválido.' });
-    }
     const msg = err?.message?.includes('AUTH_SECRET')
       ? 'Servidor sem AUTH_SECRET configurado.'
       : 'Erro interno do servidor.';

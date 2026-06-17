@@ -145,6 +145,12 @@ body.viewer-advanced-active {
   gap: 8px;
 }
 
+.painel-pos-modelo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .painel-opcoes-body {
   display: flex;
   flex-direction: column;

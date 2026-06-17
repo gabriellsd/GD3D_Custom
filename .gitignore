@@ -9,4 +9,5 @@ auth.users.json
 .env
 .env.*
 !.env.example
-.cursor/
+
+.vercel

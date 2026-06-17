@@ -1,13 +1,12 @@
 ﻿import { initShell } from '../layout/shell.js';
 import { requireRole } from '../auth/client.js';
 import { initGd3dProduto } from "../viewer/advanced/gd3d-produto.js";
-import { disposeMaterialDeep, disposeObject3D } from "../utils/dispose-three.js";
 import * as THREE from "three";
     import { STLLoader } from "three/addons/loaders/STLLoader.js";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
     import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-    import { revogarUrlsFbx } from "../viewer/advanced/fbx-loader-helper.js";
+    import { carregarFbx, revogarUrlsFbx } from "../viewer/advanced/fbx-loader-helper.js";
     import { OFFLoader } from "../viewer/advanced/off-loader.js";
     import { carregar3mf } from "../viewer/advanced/loader-3mf.js";
     import { initFerramentas } from "../viewer/advanced/ferramentas.js";
@@ -15,7 +14,7 @@ import * as THREE from "three";
     import { montarControlesViewport } from "../viewer/advanced/controles-viewport.js";
     import { initPublicarProduto } from "../viewer/advanced/publicar-produto.js";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
-    import { analisarGeometriaAsync } from "../viewer/advanced/geometria-client.js";
+    import { alinharBaseNaMesa, centralizarNaMesa, marcarPosicaoBaseMesa } from "../viewer/advanced/posicionar-na-mesa.js";
 
 (async () => {
     await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
@@ -154,7 +153,6 @@ import * as THREE from "three";
     let secaoFilamentosCache = null;
     let secaoExtensoesCache = null;
     let fbxUrlsAtivas = [];
-    let loadGeneration = 0;
     const gltfLoader = new GLTFLoader();
 
     canvas.addEventListener("pointerdown", (event) => {
@@ -250,32 +248,35 @@ import * as THREE from "three";
       statusEl.className = isError ? "status error" : "status";
     }
 
-    function limparMateriaisOriginais() {
-      for (const lista of materiaisOriginais.values()) {
-        for (const material of lista) disposeMaterialDeep(material);
-      }
-      materiaisOriginais.clear();
-      meshComCorVertice.clear();
+    function setPainelPosModelo(visible) {
+      document.getElementById("painel-pos-modelo")?.classList.toggle("hidden", !visible);
     }
 
     function clearModel() {
-      if (!currentModel) return;
-
-      ferramentas?.onModelCleared();
-      extensoes?.onModelCleared();
-
-      modelPivot.remove(currentModel);
-      limparMateriaisOriginais();
-      limparCoresModelo();
-      disposeObject3D(currentModel);
-      currentModel = null;
-      secaoFilamentosCache = null;
-      secaoExtensoesCache = null;
-      revogarUrlsFbx(fbxUrlsAtivas);
-      fbxUrlsAtivas = [];
-      ultimoArquivoFile = null;
-      ultimoArquivosImportados = null;
-      publicarProduto?.onModelCleared();
+      if (currentModel) {
+        modelPivot.remove(currentModel);
+        currentModel.traverse((child) => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+            else child.material.dispose();
+          }
+        });
+        currentModel = null;
+        materiaisOriginais.clear();
+        meshComCorVertice.clear();
+        limparCoresModelo();
+        ferramentas?.onModelCleared();
+        extensoes?.onModelCleared();
+        secaoFilamentosCache = null;
+        secaoExtensoesCache = null;
+        revogarUrlsFbx(fbxUrlsAtivas);
+        fbxUrlsAtivas = [];
+        ultimoArquivoFile = null;
+        ultimoArquivosImportados = null;
+        publicarProduto?.onModelCleared();
+        setPainelPosModelo(false);
+      }
     }
 
     function setPanOffset(x, y, z) {
@@ -344,6 +345,12 @@ import * as THREE from "three";
       updateCamera();
     }
 
+    const vetorA = new THREE.Vector3();
+    const vetorB = new THREE.Vector3();
+    const vetorC = new THREE.Vector3();
+    const vetorAb = new THREE.Vector3();
+    const vetorAc = new THREE.Vector3();
+
     function formatarNumero(valor, casas = 2) {
       return Number(valor).toLocaleString("pt-BR", {
         minimumFractionDigits: 0,
@@ -385,6 +392,13 @@ import * as THREE from "three";
       if (objetos > 0) metadados.objetos3mf = objetos;
 
       return metadados;
+    }
+
+    function paraMetros(valor, origem) {
+      if (origem === "m") return valor;
+      if (origem === "mm") return valor / 1000;
+      if (origem === "cm") return valor / 100;
+      return valor;
     }
 
     function escolherUnidadeExibicao(maiorDimensaoMetros) {
@@ -441,6 +455,119 @@ import * as THREE from "three";
         areaM2,
         volumeM3,
         maiorDim,
+      };
+    }
+
+    function areaTriangulo(geometria, i0, i1, i2) {
+      const pos = geometria.attributes.position;
+      vetorA.fromBufferAttribute(pos, i0);
+      vetorB.fromBufferAttribute(pos, i1);
+      vetorC.fromBufferAttribute(pos, i2);
+      vetorAb.subVectors(vetorB, vetorA);
+      vetorAc.subVectors(vetorC, vetorA);
+      return vetorAb.cross(vetorAc).length() * 0.5;
+    }
+
+    function volumeTriangulo(geometria, i0, i1, i2) {
+      const pos = geometria.attributes.position;
+      vetorA.fromBufferAttribute(pos, i0);
+      vetorB.fromBufferAttribute(pos, i1);
+      vetorC.fromBufferAttribute(pos, i2);
+      return vetorA.dot(vetorB.cross(vetorC)) / 6;
+    }
+
+    function analisarGeometria(object) {
+      let vertices = 0;
+      let triangulos = 0;
+      let malhas = 0;
+      let geometrias = 0;
+      let areaSuperficie = 0;
+      let volume = 0;
+      let comNormais = 0;
+      let comUv = 0;
+      let comCores = 0;
+      let indexadas = 0;
+      let naoIndexadas = 0;
+      const materiais = new Set();
+      let texturas = 0;
+      let grupos = 0;
+
+      object.traverse((filho) => {
+        if (filho.isMesh && filho.geometry) {
+          malhas += 1;
+          geometrias += 1;
+          const geo = filho.geometry;
+          const pos = geo.attributes.position;
+          if (pos) vertices += pos.count;
+
+          if (geo.index) {
+            indexadas += 1;
+            triangulos += geo.index.count / 3;
+            for (let i = 0; i < geo.index.count; i += 3) {
+              areaSuperficie += areaTriangulo(
+                geo,
+                geo.index.getX(i),
+                geo.index.getX(i + 1),
+                geo.index.getX(i + 2)
+              );
+              volume += volumeTriangulo(
+                geo,
+                geo.index.getX(i),
+                geo.index.getX(i + 1),
+                geo.index.getX(i + 2)
+              );
+            }
+          } else if (pos) {
+            naoIndexadas += 1;
+            triangulos += pos.count / 3;
+            for (let i = 0; i < pos.count; i += 3) {
+              areaSuperficie += areaTriangulo(geo, i, i + 1, i + 2);
+              volume += volumeTriangulo(geo, i, i + 1, i + 2);
+            }
+          }
+
+          if (geo.attributes.normal) comNormais += 1;
+          if (geo.attributes.uv) comUv += 1;
+          if (geo.attributes.color) comCores += 1;
+          if (filho.material) {
+            const lista = Array.isArray(filho.material) ? filho.material : [filho.material];
+            lista.forEach((mat) => {
+              materiais.add(mat.uuid);
+              if (mat.map || mat.normalMap || mat.roughnessMap || mat.metalnessMap) {
+                texturas += 1;
+              }
+            });
+          }
+          if (filho.groups?.length) grupos += filho.groups.length;
+        } else if (filho.isGroup || filho.isObject3D) {
+          if (filho !== object && filho.children.length > 0 && !filho.isMesh) {
+            grupos += 1;
+          }
+        }
+      });
+
+      const caixa = new THREE.Box3().setFromObject(object);
+      const tamanho = caixa.getSize(new THREE.Vector3());
+      const centro = caixa.getCenter(new THREE.Vector3());
+
+      return {
+        vertices,
+        triangulos,
+        malhas,
+        geometrias,
+        areaSuperficie,
+        volume: Math.abs(volume),
+        comNormais,
+        comUv,
+        comCores,
+        indexadas,
+        naoIndexadas,
+        materiais: materiais.size,
+        texturas,
+        grupos,
+        tamanho,
+        centro,
+        diagonal: tamanho.length(),
       };
     }
 
@@ -772,8 +899,6 @@ import * as THREE from "three";
       object.traverse((child) => {
         if (!child.isMesh) return;
 
-        const anterior = child.material;
-
         if (usarCores && materiaisOriginais.has(child.uuid)) {
           const originais = materiaisOriginais.get(child.uuid);
           const clonados = originais.map((material) => {
@@ -786,22 +911,10 @@ import * as THREE from "three";
             return mat;
           });
           child.material = clonados.length === 1 ? clonados[0] : clonados;
-        } else {
-          child.material = materialPadrao(child.geometry);
+          return;
         }
 
-        if (anterior && anterior !== child.material) {
-          const originais = materiaisOriginais.get(child.uuid) || [];
-          const refs = new Set(
-            originais.flatMap((material) =>
-              Array.isArray(material) ? material : [material]
-            )
-          );
-          const lista = Array.isArray(anterior) ? anterior : [anterior];
-          for (const material of lista) {
-            if (!refs.has(material)) disposeMaterialDeep(material);
-          }
-        }
+        child.material = materialPadrao(child.geometry);
       });
     }
 
@@ -942,14 +1055,14 @@ import * as THREE from "three";
       document.getElementById("cores-modelo-vazio").classList.add("hidden");
     }
 
-    async function showModel(object, arquivoMeta, extras = {}) {
+    function showModel(object, arquivoMeta, extras = {}) {
       clearModel();
 
       ultimoArquivoMeta = arquivoMeta;
       ultimoExtras = extras;
       ultimoFormato = arquivoMeta.formato || "STL";
 
-      const geo = await analisarGeometriaAsync(object);
+      const geo = analisarGeometria(object);
       const coresModelo = extrairCoresDoModelo(object, extras.bambu);
       salvarEstadoVisual(object);
       aplicarVisual(object);
@@ -978,6 +1091,7 @@ import * as THREE from "three";
       atualizarCoresModelo(coresModelo);
       ferramentas?.sincronizarCameras();
       publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile);
+      setPainelPosModelo(true);
       setStatus(`Modelo carregado: ${arquivoMeta.nome}`);
     }
 
@@ -1007,7 +1121,6 @@ import * as THREE from "three";
           object = gltf.scene;
           extras.gltf = gltf;
         } else if (ext === "fbx") {
-          const { carregarFbx } = await import("../viewer/advanced/fbx-loader-helper.js");
           const resultadoFbx = await carregarFbx(arquivosRelacionados.length ? arquivosRelacionados : [file]);
           object = resultadoFbx.object;
           extras.fbxUrls = resultadoFbx.urls;
@@ -1029,54 +1142,48 @@ import * as THREE from "three";
     }
 
     async function loadVariosStl(arquivos) {
-      const gen = ++loadGeneration;
       ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros STL…`);
       setStatus(`Carregando ${arquivos.length} ficheiros STL…`);
 
       try {
         const arquivoMeta = await lerMetadadosVariosStl(arquivos);
-        if (gen !== loadGeneration) return;
         ultimoArquivoFile = arquivos[0];
         ultimoArquivosImportados = arquivos;
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const object = await carregarVariosStl(arquivos);
-        if (gen !== loadGeneration) return;
         for (const arquivo of arquivos) {
           ferramentas?.salvarRecente(arquivo);
         }
 
-        await showModel(criarContainerModelo(object, "stl"), arquivoMeta, { multiStl: true });
+        showModel(criarContainerModelo(object, "stl"), arquivoMeta, { multiStl: true });
       } catch (err) {
-        if (gen === loadGeneration) setStatus(`Erro: ${err.message}`, true);
+        setStatus(`Erro: ${err.message}`, true);
       } finally {
-        if (gen === loadGeneration) ferramentas?.setLoading(false);
+        ferramentas?.setLoading(false);
       }
     }
 
     async function loadFile(file, arquivosRelacionados = []) {
-      const gen = ++loadGeneration;
       const ext = file.name.split(".").pop().toLowerCase();
       ferramentas?.setLoading(true, `Carregando ${file.name}...`);
       setStatus(`Carregando ${file.name}...`);
 
       try {
         const arquivoMeta = await lerMetadadosArquivo(file, ext);
-        if (gen !== loadGeneration) return;
         ultimoArquivoFile = file;
         ultimoArquivosImportados = [file];
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
-        if (gen !== loadGeneration) return;
         if (extras.fbxUrls) fbxUrlsAtivas = extras.fbxUrls;
 
         ferramentas?.salvarRecente(file);
-        await showModel(criarContainerModelo(object, ext), arquivoMeta, extras);
+        showModel(criarContainerModelo(object, ext), arquivoMeta, extras);
       } catch (err) {
-        if (gen === loadGeneration) setStatus(`Erro: ${err.message}`, true);
+        setStatus(`Erro: ${err.message}`, true);
       } finally {
-        if (gen === loadGeneration) ferramentas?.setLoading(false);
+        ferramentas?.setLoading(false);
       }
     }
 
@@ -1120,9 +1227,9 @@ import * as THREE from "three";
       e.target.value = "";
     });
 
-    async function atualizarSecaoFilamentos() {
+    function atualizarSecaoFilamentos() {
       if (!currentModel || !ultimoArquivoMeta || !ferramentas) return;
-      const geo = await analisarGeometriaAsync(currentModel);
+      const geo = analisarGeometria(currentModel);
       const caixa = new THREE.Box3().setFromObject(currentModel);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
       secaoFilamentosCache = ferramentas.getSecaoFilamentos();

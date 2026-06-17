@@ -64,10 +64,6 @@ export function authDevPlugin() {
 
         try {
           if (url === '/api/auth/login' && req.method === 'POST') {
-            if (isSupabaseServerConfigured()) {
-              sendJson(res, 410, { error: 'Use autenticação Supabase neste site.' });
-              return;
-            }
             const body = JSON.parse((await readBody(req)) || '{}');
             const user = authenticate(body.email, body.password);
             if (!user) {

@@ -1,7 +1,14 @@
 /** Mapeamento entre linhas Supabase e o formato da loja. */
-import { nomeToSlug } from '../../lib/slug.mjs';
 
-export { nomeToSlug };
+export function nomeToSlug(nome) {
+  return String(nome)
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96);
+}
 
 function asciiStorageSegment(value) {
   return String(value)
@@ -34,7 +41,6 @@ export function rowToProduct(row) {
   if (row.preview_image) product.previewImage = row.preview_image;
   if (row.preview_images?.length) product.previewImages = row.preview_images;
   if (row.model_url) product.modelUrl = row.model_url;
-  if (row.model_glb_url) product.modelGlbUrl = row.model_glb_url;
   if (row.model3mf_url) product.model3mfUrl = row.model3mf_url;
   if (row.colors?.length) product.colors = row.colors;
   if (row.sizes?.length) product.sizes = row.sizes;
@@ -70,7 +76,6 @@ export function productToRow(product) {
     preview_image: product.previewImage || null,
     preview_images: product.previewImages || [],
     model_url: product.modelUrl || null,
-    model_glb_url: product.modelGlbUrl || null,
     model3mf_url: product.model3mfUrl || null,
     colors: product.colors || [],
     model_color: product.modelColor || null,
@@ -93,25 +98,8 @@ export async function fetchCloudProducts(supabase, { admin = false } = {}) {
 }
 
 export async function getNextProductId(supabase) {
-  const { data, error } = await supabase
-    .from('products')
-    .select('id')
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data?.id ?? 0) + 1;
-}
-
-export async function slugExists(supabase, { category, subcategory, slug }) {
-  let query = supabase.from('products').select('id').eq('category', category).eq('slug', slug);
-  if (subcategory) query = query.eq('subcategory', subcategory);
-  else query = query.is('subcategory', null);
-
-  const { data, error } = await query.maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
+  const products = await fetchCloudProducts(supabase, { admin: true });
+  return products.reduce((max, p) => Math.max(max, p.id), 0) + 1;
 }
 
 export async function uploadProductAsset(supabase, file, productRow) {

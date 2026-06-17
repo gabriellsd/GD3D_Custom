@@ -1,0 +1,1 @@
+-- Ver supabase/setup.sql (ficheiro principal de configuração Auth)

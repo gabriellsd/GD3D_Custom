@@ -17,7 +17,6 @@ function serveProductAssetsPlugin() {
     '.3mf': 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
     '.stl': 'model/stl',
     '.mf3': 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
-    '.wasm': 'application/wasm',
   };
 
   return {
@@ -109,20 +108,6 @@ export default defineConfig({
   vercel: {
     cleanUrls: false,
     trailingSlash: false,
-    headers: [
-      {
-        source: '/(.*)',
-        headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
-        ],
-      },
-    ],
   },
   server: {
     watch: {
@@ -140,14 +125,7 @@ export default defineConfig({
     },
   },
   build: {
-    assetsInclude: ['**/*.wasm'],
     rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/three')) return 'three';
-          if (id.includes('node_modules/@supabase')) return 'supabase';
-        },
-      },
       input: {
         main: resolve(__dirname, 'index.html'),
         produtos: resolve(__dirname, 'produtos.html'),
