@@ -1,24 +1,21 @@
 /**
  * Loader 3MF Bambu/Orca (paint_color + filament_colour).
- * Baseado no GD3D Creative — suporta multicolor AMS.
  */
 import * as THREE from "three";
 import * as fflate from "three/addons/libs/fflate.module.js";
 import { extrairMetadadosBambu } from "./bambu-metadados.js";
 import {
+  decodeBambuPaintSlot,
   extractInnerObjectXml,
   parseObjectModelPath,
   resolverMontagem,
 } from "../bambu3mfParse.js";
+import {
+  buildColoredFilamentGroup as buildColoredGroup,
+  matrixFrom3mfTransform,
+} from "../bambu3mfMesh.js";
 
-const SLOT_CODES = [
-  "4", "8", "0C", "1C", "2C", "3C", "4C", "5C", "6C", "7C",
-  "8C", "9C", "AC", "BC", "CC", "DC", "EC", "FC",
-];
-
-const TRIANGLE_RE =
-  /<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"(?:\s+paint_color="([^"]*)")?\s*\/>/g;
-const VERTEX_RE = /<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/g;
+export { decodeBambuPaintSlot } from "../bambu3mfParse.js";
 
 const SUPPORT_PART_RE =
   /support|suporte|generic|cube|brim|skirt|raft|pin|dummy|placeholder|prime/i;
@@ -43,31 +40,6 @@ function lerTextoZip(arquivos, sufixo) {
   const chave = chaveZip(arquivos, sufixo);
   if (!chave) return null;
   return new TextDecoder().decode(arquivos[chave]);
-}
-
-export function decodeBambuPaintSlot(paintColor) {
-  if (!paintColor || paintColor === "0") return null;
-
-  let restante = paintColor;
-  let slot = null;
-
-  for (let i = SLOT_CODES.length - 1; i >= 0; i--) {
-    const codigo = SLOT_CODES[i];
-    if (restante.includes(codigo)) {
-      restante = restante.split(codigo).join("");
-      slot = i + 1;
-    }
-  }
-
-  return slot;
-}
-
-function normalizarCorHex(hex) {
-  if (!hex || typeof hex !== "string") return null;
-  const limpo = hex.trim();
-  if (!limpo) return null;
-  const comHash = limpo.startsWith("#") ? limpo : `#${limpo}`;
-  return comHash.toUpperCase();
 }
 
 function parseJsonArrayCampo(projectSettings, campo) {
@@ -187,89 +159,6 @@ function isSupportPartMeta(meta, innerObjectXml) {
   if (triCount > 0 && triCount < 100 && !hasPaint) return true;
 
   return false;
-}
-
-function parseVertices(verticesXml) {
-  const coords = [];
-  let match;
-  VERTEX_RE.lastIndex = 0;
-  while ((match = VERTEX_RE.exec(verticesXml)) !== null) {
-    coords.push(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]));
-  }
-  return coords;
-}
-
-function pushTriangle(positions, vertices, v1, v2, v3) {
-  const i1 = v1 * 3;
-  const i2 = v2 * 3;
-  const i3 = v3 * 3;
-  positions.push(
-    vertices[i1], vertices[i1 + 1], vertices[i1 + 2],
-    vertices[i2], vertices[i2 + 1], vertices[i2 + 2],
-    vertices[i3], vertices[i3 + 1], vertices[i3 + 2]
-  );
-}
-
-function matrixFrom3mfTransform(values) {
-  const m = new THREE.Matrix4();
-  if (!values || values.length < 12) return m.identity();
-  m.set(
-    values[0], values[3], values[6], values[9],
-    values[1], values[4], values[7], values[10],
-    values[2], values[5], values[8], values[11],
-    0, 0, 0, 1
-  );
-  return m;
-}
-
-function buildColoredGroup(objectXml, filamentColours, defaultExtruder) {
-  const verticesPart = objectXml.match(/<vertices>[\s\S]*?<\/vertices>/);
-  const trianglesPart = objectXml.match(/<triangles>[\s\S]*?<\/triangles>/);
-
-  if (!verticesPart || !trianglesPart) {
-    throw new Error("3MF Bambu: mesh inválido");
-  }
-
-  const vertices = parseVertices(verticesPart[0]);
-  const buckets = new Map();
-  let match;
-
-  TRIANGLE_RE.lastIndex = 0;
-  while ((match = TRIANGLE_RE.exec(trianglesPart[0])) !== null) {
-    const v1 = parseInt(match[1], 10);
-    const v2 = parseInt(match[2], 10);
-    const v3 = parseInt(match[3], 10);
-    const paintedSlot = decodeBambuPaintSlot(match[4]);
-    const slot = paintedSlot ?? defaultExtruder;
-
-    if (!buckets.has(slot)) buckets.set(slot, []);
-    pushTriangle(buckets.get(slot), vertices, v1, v2, v3);
-  }
-
-  const group = new THREE.Group();
-
-  for (const [slot, positions] of buckets) {
-    if (!positions.length) continue;
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(new Float32Array(positions), 3)
-    );
-    geometry.computeVertexNormals();
-
-    const colorHex = normalizarCorHex(filamentColours[slot - 1]) || "#CCCCCC";
-    const material = new THREE.MeshPhongMaterial({
-      color: new THREE.Color(colorHex),
-      flatShading: true,
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = `filament-${slot}`;
-    group.add(mesh);
-  }
-
-  return group;
 }
 
 function marcarComoSuporte(grupo, objectId, meta) {

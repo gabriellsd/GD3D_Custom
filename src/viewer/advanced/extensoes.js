@@ -3,9 +3,6 @@
  */
 import * as THREE from "three";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { extrairZip } from "./zip-loader.js";
-import { carregarAmf } from "./amf-loader.js";
-import { carregarGcode, aplicarCamadaGcode, infoGcode } from "./gcode-loader.js";
 import { analisarMalha, secaoAnaliseMalha } from "./analise-malha.js";
 import { criarMesaImpressao } from "./mesa-impressao.js";
 import { calcularAutoOrientacao, aplicarAutoOrientacao } from "./auto-orient.js";
@@ -15,7 +12,6 @@ import {
   aplicarPresetMaterial,
   restaurarMateriais,
 } from "./materiais-preview.js";
-import { capturarPngTransparente, exportarGifGiro } from "./export-media.js";
 import { coletarPecas, renderizarArvorePecas } from "./arvore-pecas.js";
 import {
   juntarMeshesModelo,
@@ -23,10 +19,7 @@ import {
   substituirConteudoOrientacao,
   contarPecasVisiveis,
 } from "./juntar-pecas.js";
-import { carregar3mf } from "./loader-3mf.js";
-import { criarComparacao } from "./comparacao.js";
 import { copiarLinkCompartilhamento, lerSessaoDaUrl } from "./sessao-share.js";
-import { suportaAr, iniciarAr } from "./ar-xr.js";
 import { sincronizarToggleMesa } from "./controles-viewport.js";
 import { secaoMetadadosBambu } from "./bambu-metadados.js";
 import {
@@ -39,6 +32,7 @@ import {
 } from "./posicionar-na-mesa.js";
 
 let dracoLoader = null;
+let comparacaoInstancia = null;
 
 function obterDracoLoader() {
   if (!dracoLoader) {
@@ -50,7 +44,14 @@ function obterDracoLoader() {
 
 export function initExtensoes(app) {
   const mesa = criarMesaImpressao();
-  const comparacao = criarComparacao(app.modelPivot, app.scene);
+
+  async function obterComparacao() {
+    if (!comparacaoInstancia) {
+      const { criarComparacao } = await import("./comparacao.js");
+      comparacaoInstancia = criarComparacao(app.modelPivot, app.scene);
+    }
+    return comparacaoInstancia;
+  }
 
   const estado = {
     pecas: [],
@@ -150,7 +151,7 @@ export function initExtensoes(app) {
     const model = app.getCurrentModel();
     if (!model) throw new Error("Carregue um modelo primeiro.");
 
-    comparacao.limpar();
+    (await obterComparacao()).limpar();
     const inputComp = document.getElementById("input-comparacao");
     if (inputComp) inputComp.value = "";
 
@@ -174,6 +175,7 @@ export function initExtensoes(app) {
     if (file && eh3mf) {
       app.setStatus("A montar peças do 3MF…");
       const buffer = await file.arrayBuffer();
+      const { carregar3mf } = await import("./loader-3mf.js");
 
       const { object: montadoObj } = carregar3mf(buffer, { layout: "montado" });
       substituirConteudoOrientacao(model, montadoObj);
@@ -280,16 +282,19 @@ export function initExtensoes(app) {
     const ext = file.name.split(".").pop().toLowerCase();
 
     if (ext === "zip") {
+      const { extrairZip } = await import("./zip-loader.js");
       const { principal, todos } = await extrairZip(file);
       return carregarEstendido(principal, todos, loaders);
     }
 
     if (ext === "amf") {
+      const { carregarAmf } = await import("./amf-loader.js");
       const buffer = await file.arrayBuffer();
       return { object: carregarAmf(buffer), extras: {} };
     }
 
     if (ext === "gcode" || ext === "gco" || ext === "g") {
+      const { carregarGcode, infoGcode } = await import("./gcode-loader.js");
       const buffer = await file.arrayBuffer();
       const object = carregarGcode(buffer);
       estado.gcodeGrupo = object;
@@ -365,7 +370,7 @@ export function initExtensoes(app) {
   }
 
   function onModelCleared() {
-    comparacao.limpar();
+    void obterComparacao().then((c) => c.limpar());
     mesa.remover(app.modelPivot);
     estado.pecas = [];
     estado.analiseMalha = null;
@@ -520,13 +525,15 @@ export function initExtensoes(app) {
       aplicarEscala(v);
     });
 
-    document.getElementById("btn-png-alpha")?.addEventListener("click", () => {
+    document.getElementById("btn-png-alpha")?.addEventListener("click", async () => {
+      const { capturarPngTransparente } = await import("./export-media.js");
       const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
       capturarPngTransparente(app.renderer, app.scene, cam);
       app.setStatus("PNG com fundo transparente salvo");
     });
 
     document.getElementById("btn-gif-giro")?.addEventListener("click", async () => {
+      const { exportarGifGiro } = await import("./export-media.js");
       const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
       app.setStatus("Gerando vídeo...");
       try {
@@ -557,12 +564,12 @@ export function initExtensoes(app) {
       aplicarTema(e.target.value);
     });
 
-    document.getElementById("sel-modo-comparacao")?.addEventListener("change", (e) => {
-      comparacao.setModo(e.target.value);
+    document.getElementById("sel-modo-comparacao")?.addEventListener("change", async (e) => {
+      (await obterComparacao()).setModo(e.target.value);
     });
 
-    document.getElementById("slider-opacidade-comp")?.addEventListener("input", (e) => {
-      comparacao.setOpacidade(parseFloat(e.target.value));
+    document.getElementById("slider-opacidade-comp")?.addEventListener("input", async (e) => {
+      (await obterComparacao()).setOpacidade(parseFloat(e.target.value));
     });
 
     document.getElementById("input-comparacao")?.addEventListener("change", async (e) => {
@@ -573,6 +580,7 @@ export function initExtensoes(app) {
         const ext = file.name.split(".").pop().toLowerCase();
         const modelo =
           app.criarContainerModelo?.(resultado.object, ext) ?? resultado.object;
+        const comparacao = await obterComparacao();
         comparacao.definirModelo(
           modelo,
           document.getElementById("sel-modo-comparacao")?.value || "ghost"
@@ -592,27 +600,30 @@ export function initExtensoes(app) {
       }
     });
 
-    document.getElementById("btn-limpar-comparacao")?.addEventListener("click", () => {
-      comparacao.limpar();
+    document.getElementById("btn-limpar-comparacao")?.addEventListener("click", async () => {
+      (await obterComparacao()).limpar();
       app.setStatus("Comparação removida");
     });
 
-    document.getElementById("slider-gcode-camada")?.addEventListener("input", (e) => {
+    document.getElementById("slider-gcode-camada")?.addEventListener("input", async (e) => {
       if (!estado.gcodeGrupo) return;
+      const { aplicarCamadaGcode } = await import("./gcode-loader.js");
       aplicarCamadaGcode(estado.gcodeGrupo, parseInt(e.target.value, 10));
     });
 
-    suportaAr().then((ok) => {
-      const btn = document.getElementById("btn-ar");
-      if (!btn) return;
-      btn.classList.toggle("hidden", !ok);
-      btn.addEventListener("click", () => {
-        iniciarAr({
-          renderer: app.renderer,
-          scene: app.scene,
-          modelPivot: app.modelPivot,
-          onStatus: app.setStatus,
-        }).catch((err) => app.setStatus(err.message, true));
+    import("./ar-xr.js").then(({ suportaAr, iniciarAr }) => {
+      suportaAr().then((ok) => {
+        const btn = document.getElementById("btn-ar");
+        if (!btn) return;
+        btn.classList.toggle("hidden", !ok);
+        btn.addEventListener("click", () => {
+          iniciarAr({
+            renderer: app.renderer,
+            scene: app.scene,
+            modelPivot: app.modelPivot,
+            onStatus: app.setStatus,
+          }).catch((err) => app.setStatus(err.message, true));
+        });
       });
     });
 
