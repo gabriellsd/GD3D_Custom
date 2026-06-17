@@ -170,6 +170,7 @@ export function initExtensoes(app) {
       arquivosImportados.filter((f) => f.name?.toLowerCase().endsWith(".stl")).length >= 2;
 
     let montagem3mf = false;
+    let resultado;
 
     if (file && eh3mf) {
       app.setStatus("A montar peças do 3MF…");
@@ -185,12 +186,19 @@ export function initExtensoes(app) {
         model.userData.mesaBasePos = model.position.clone();
         model.userData.mesaOffsetMm = { x: 0, z: 0 };
       }
-    }
 
-    const resultado = juntarMeshesModelo(model, {
-      encaixarBbox: !montagem3mf && !multiStl,
-      encaixarProximidade: multiStl,
-    });
+      resultado = juntarMeshesModelo(model, {
+        encaixarBbox: false,
+        encaixarProximidade: false,
+        montagem3mf: true,
+      });
+      resultado.pecasAntes = pecasAntes;
+    } else {
+      resultado = juntarMeshesModelo(model, {
+        encaixarBbox: !multiStl,
+        encaixarProximidade: multiStl,
+      });
+    }
 
     if (!resultado.jaUnico) {
       substituirModeloJuntado(model, resultado.mesh);
@@ -229,7 +237,7 @@ export function initExtensoes(app) {
           ? `Montado com aviso: ${resultado.avisoMontagem}`
           : `Montado: ${pecasAntes} STL → 1 modelo.`;
       } else if (montagem3mf) {
-        msgStatus = `Montado e unido: ${pecasAntes} peças → 1 modelo.`;
+        msgStatus = `Montado e unido: ${resultado.pecasAntes ?? pecasAntes} peças → 1 modelo.`;
       } else {
         msgStatus = `Unido: ${pecasAntes} peças → 1 modelo (pecas-unidas).`;
       }
@@ -551,10 +559,6 @@ export function initExtensoes(app) {
       } catch {
         app.setStatus("Não foi possível copiar o link", true);
       }
-    });
-
-    document.getElementById("sel-tema")?.addEventListener("change", (e) => {
-      aplicarTema(e.target.value);
     });
 
     document.getElementById("sel-modo-comparacao")?.addEventListener("change", (e) => {

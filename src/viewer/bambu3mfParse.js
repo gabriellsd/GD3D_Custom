@@ -345,6 +345,28 @@ export function relative3mfTransform(base, other) {
   return matrix4To3mf(mb);
 }
 
+/** Cópias na placa: mantém rotação de cada peça e separa pelo offset da mesa. */
+function transformMontagemPlacaRelativa(baseT, itemT, index) {
+  if (!itemT) return null;
+  if (index === 0) return stripTranslationTransform(itemT);
+  if (!baseT) return stripTranslationTransform(itemT);
+
+  return [
+    itemT[0],
+    itemT[1],
+    itemT[2],
+    itemT[3],
+    itemT[4],
+    itemT[5],
+    itemT[6],
+    itemT[7],
+    itemT[8],
+    itemT[9] - baseT[9],
+    itemT[10] - baseT[10],
+    itemT[11] - baseT[11],
+  ];
+}
+
 function resolverMontagemMontado(
   objectPath,
   objectFileXml,
@@ -395,12 +417,20 @@ function resolverMontagemMontado(
   if (files && buildItems.length >= 2) {
     const leaves = [];
     const baseT = buildItems[0].transform;
+    const usarOffsetPlaca = buildItems.every(
+      (item, i) =>
+        i === 0 ||
+        item.objectId === buildItems[0].objectId ||
+        item.path === buildItems[0].path
+    );
 
     for (let i = 0; i < buildItems.length; i++) {
       const item = buildItems[i];
       let transform = null;
 
-      if (i === 0) {
+      if (usarOffsetPlaca) {
+        transform = transformMontagemPlacaRelativa(baseT, item.transform, i);
+      } else if (i === 0) {
         transform = item.transform
           ? stripTranslationTransform(item.transform)
           : null;

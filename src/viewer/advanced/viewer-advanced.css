@@ -995,3 +995,45 @@ body[data-tema="claro"] .viewer-advanced-root aside {
 .pill-cama-label {
   white-space: nowrap;
 }
+
+.barra-ferramentas {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(72, 72, 72, 0.92);
+  border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  max-width: min(100%, 420px);
+}
+
+@media (max-width: 960px) {
+  .viewer-barra-inferior {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    bottom: 48px;
+  }
+
+  .pill-cama {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .barra-vistas {
+    grid-column: 1;
+    justify-self: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .barra-ferramentas {
+    grid-column: 1;
+    justify-self: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

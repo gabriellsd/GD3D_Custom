@@ -322,7 +322,7 @@ function encaixarPorProximidade(geometrias, tolerancia = 0.08) {
 }
 
 /** Deita na horizontal → tenta endireitar para pré-visualização montada. */
-function endireitarGeometriaUnida(geo) {
+export function endireitarGeometriaUnida(geo) {
   geo.computeBoundingBox();
   const s = geo.boundingBox.getSize(new THREE.Vector3());
   if (!s.x || !s.y || !s.z) return;
@@ -420,14 +420,19 @@ export function detectarCopiasMeshIguais(root) {
 }
 
 /** Mantém a primeira peça montada e descarta cópias idênticas na placa. */
-export function extrairMeshUnicoDeGrupo(root, indiceGrupo = 0) {
+export function extrairMeshUnicoDeGrupo(root, indiceGrupo = 0, { endireitar = false } = {}) {
   const orientacao = obterOrientacao(root);
   if (!orientacao) throw new Error('Modelo sem estrutura para juntar.');
 
   const grupos = obterGruposPecaRaiz(orientacao);
-  if (!grupos.length) throw new Error('Nenhuma peça para extrair.');
-
-  const grupo = grupos[indiceGrupo] ?? grupos[0];
+  let grupo;
+  if (grupos.length) {
+    grupo = grupos[indiceGrupo] ?? grupos[0];
+  } else {
+    const raiz = orientacao.children[0];
+    if (!raiz) throw new Error('Nenhuma peça para extrair.');
+    grupo = raiz;
+  }
   root.updateMatrixWorld(true);
   orientacao.updateMatrixWorld(true);
 
@@ -443,6 +448,7 @@ export function extrairMeshUnicoDeGrupo(root, indiceGrupo = 0) {
 
   const paraLocal = orientacao.matrixWorld.clone().invert();
   aplicarMatrizGeometria(geometria, paraLocal);
+  if (endireitar) endireitarGeometriaUnida(geometria);
   geometria.computeVertexNormals();
 
   const mesh = new THREE.Mesh(geometria, materialUnido(meshes[0]));
@@ -455,8 +461,8 @@ export function extrairMeshUnicoDeGrupo(root, indiceGrupo = 0) {
   return {
     mesh,
     jaUnico: false,
-    pecasAntes: grupos.length,
-    copiaUnica: true,
+    pecasAntes: Math.max(grupos.length, 1),
+    copiaUnica: grupos.length <= 1,
   };
 }
 
@@ -521,6 +527,7 @@ export function juntarMeshesModelo(
     apenasVisiveis = true,
     encaixarBbox = true,
     encaixarProximidade = false,
+    montagem3mf = false,
   } = {}
 ) {
   const orientacao = obterOrientacao(root);
@@ -551,7 +558,9 @@ export function juntarMeshesModelo(
     .map((g) => fundirGrupoNoMundo(g))
     .filter(Boolean);
 
-  geometrias = filtrarGeometriasRelevantes(geometrias);
+  if (!montagem3mf) {
+    geometrias = filtrarGeometriasRelevantes(geometrias);
+  }
 
   if (geometrias.length < 2) {
     throw new Error('Não foi possível identificar duas peças válidas para juntar.');
