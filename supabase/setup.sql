@@ -41,3 +41,9 @@ create trigger gd3d_assign_client_role_trigger
 -- update auth.users
 -- set raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"name":"Gabriel"}'::jsonb
 -- where email = 'teu@email.com';
+
+-- ---------------------------------------------------------------------------
+-- 4) Segurança de papéis
+-- O site e o RLS usam apenas app_metadata.role (nunca user_metadata.role).
+-- Promova admins só com o UPDATE da secção 2.
+-- ---------------------------------------------------------------------------

@@ -8,9 +8,12 @@ const STATIC_PRODUCTS = [...CATALOG_PRODUCTS].sort((a, b) => a.id - b.id);
 export let PRODUCTS = [...STATIC_PRODUCTS];
 
 let catalogPromise = null;
+let catalogGeneration = 0;
 
 export async function initProductCatalog({ force = false } = {}) {
   if (!force && catalogPromise) return catalogPromise;
+
+  const generation = ++catalogGeneration;
 
   catalogPromise = (async () => {
     if (!isSupabaseAuth()) return PRODUCTS;
@@ -20,8 +23,14 @@ export async function initProductCatalog({ force = false } = {}) {
       if (!supabase) return PRODUCTS;
 
       const cloud = await fetchCloudProducts(supabase);
+      if (generation !== catalogGeneration) return PRODUCTS;
+
       if (cloud.length) {
         PRODUCTS = cloud;
+      } else {
+        console.warn(
+          '[catalog] Supabase sem produtos publicados — a manter catálogo estático.'
+        );
       }
     } catch (err) {
       console.warn('[catalog] Cloud indisponível, a usar catálogo estático.', err);
@@ -36,4 +45,5 @@ export async function initProductCatalog({ force = false } = {}) {
 export function resetProductCatalogForTests() {
   PRODUCTS = [...STATIC_PRODUCTS];
   catalogPromise = null;
+  catalogGeneration = 0;
 }

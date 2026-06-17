@@ -52,48 +52,60 @@ function abrirDbRecentes() {
 
 async function salvarArquivoRecente(arquivo) {
   const db = await abrirDbRecentes();
-  const dados = await arquivo.arrayBuffer();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readwrite");
-    tx.objectStore(DB_LOJA).put({
-      nome: arquivo.name,
-      formato: arquivo.name.split(".").pop().toLowerCase(),
-      tamanho: arquivo.size,
-      modificado: arquivo.lastModified,
-      tipo: arquivo.type || "",
-      dados,
-      data: Date.now(),
+  try {
+    const dados = await arquivo.arrayBuffer();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_LOJA, "readwrite");
+      tx.objectStore(DB_LOJA).put({
+        nome: arquivo.name,
+        formato: arquivo.name.split(".").pop().toLowerCase(),
+        tamanho: arquivo.size,
+        modificado: arquivo.lastModified,
+        tipo: arquivo.type || "",
+        dados,
+        data: Date.now(),
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  } finally {
+    db.close();
+  }
 }
 
 async function lerArquivoRecente(nome) {
   const db = await abrirDbRecentes();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readonly");
-    const req = tx.objectStore(DB_LOJA).get(nome);
-    req.onsuccess = () => resolve(req.result ?? null);
-    req.onerror = () => reject(req.error);
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_LOJA, "readonly");
+      const req = tx.objectStore(DB_LOJA).get(nome);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function limparArquivosRecentesExceto(nomes) {
   const db = await abrirDbRecentes();
-  const permitidos = new Set(nomes);
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readwrite");
-    const loja = tx.objectStore(DB_LOJA);
-    const req = loja.getAllKeys();
-    req.onsuccess = () => {
-      for (const chave of req.result) {
-        if (!permitidos.has(chave)) loja.delete(chave);
-      }
-    };
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  try {
+    const permitidos = new Set(nomes);
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_LOJA, "readwrite");
+      const loja = tx.objectStore(DB_LOJA);
+      const req = loja.getAllKeys();
+      req.onsuccess = () => {
+        for (const chave of req.result) {
+          if (!permitidos.has(chave)) loja.delete(chave);
+        }
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 function escapeHtml(texto) {
@@ -209,14 +221,21 @@ export function initFerramentas(app) {
   }
 
   function atualizarBbox() {
-    if (bboxHelper) {
-      app.scene.remove(bboxHelper);
-      bboxHelper = null;
+    if (!estado.bbox || !app.getCurrentModel()) {
+      if (bboxHelper) {
+        bboxHelper.geometry?.dispose();
+        app.scene.remove(bboxHelper);
+        bboxHelper = null;
+      }
+      return;
     }
-    if (!estado.bbox || !app.getCurrentModel()) return;
     const box = new THREE.Box3().setFromObject(app.modelPivot);
-    bboxHelper = new THREE.Box3Helper(box, 0xe8a317);
-    app.scene.add(bboxHelper);
+    if (!bboxHelper) {
+      bboxHelper = new THREE.Box3Helper(box, 0xe8a317);
+      app.scene.add(bboxHelper);
+    } else {
+      bboxHelper.box.copy(box);
+    }
   }
 
   function atualizarReferencia() {
@@ -805,11 +824,14 @@ export function initFerramentas(app) {
     estado.temSuportes = false;
     atualizarToggleSuportes();
     if (bboxHelper) {
+      bboxHelper.geometry?.dispose();
       app.scene.remove(bboxHelper);
       bboxHelper = null;
     }
     if (cuboRef) {
       app.scene.remove(cuboRef);
+      cuboRef.geometry?.dispose();
+      cuboRef.material?.dispose();
       cuboRef = null;
     }
   }

@@ -65,21 +65,24 @@ function ensureMulticolorAlias(productPath, slug) {
     if (!fs.existsSync(dest)) {
       fs.copyFileSync(path.join(productPath, long), dest);
       console.log(`Cópia 3MF: ${long} → ${shortName}`);
+      return true;
     }
   }
+  return false;
 }
 
 export function runProductsSync({ quiet = false } = {}) {
   migrateLegacyFlatFolders();
 
   let catalog = scanProductCatalog();
+  let aliasesChanged = false;
 
   for (const item of catalog) {
     const productPath = productFolderPath(item);
-    ensureMulticolorAlias(productPath, item.slug);
+    if (ensureMulticolorAlias(productPath, item.slug)) aliasesChanged = true;
   }
 
-  const refreshed = scanProductCatalog();
+  const refreshed = aliasesChanged ? scanProductCatalog() : catalog;
   const startId = getNextAutoId(refreshed);
   const moduleSource = toProductsModule(refreshed, startId);
   const previous = fs.existsSync(OUT_FILE) ? fs.readFileSync(OUT_FILE, 'utf8') : '';

@@ -1,14 +1,7 @@
 /** Mapeamento entre linhas Supabase e o formato da loja. */
+import { nomeToSlug } from '../../lib/slug.mjs';
 
-export function nomeToSlug(nome) {
-  return String(nome)
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 96);
-}
+export { nomeToSlug };
 
 function asciiStorageSegment(value) {
   return String(value)
@@ -98,8 +91,15 @@ export async function fetchCloudProducts(supabase, { admin = false } = {}) {
 }
 
 export async function getNextProductId(supabase) {
-  const products = await fetchCloudProducts(supabase, { admin: true });
-  return products.reduce((max, p) => Math.max(max, p.id), 0) + 1;
+  const { data, error } = await supabase
+    .from('products')
+    .select('id')
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data?.id ?? 0) + 1;
 }
 
 export async function uploadProductAsset(supabase, file, productRow) {

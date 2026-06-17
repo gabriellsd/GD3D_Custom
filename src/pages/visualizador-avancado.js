@@ -1,12 +1,13 @@
 ﻿import { initShell } from '../layout/shell.js';
 import { requireRole } from '../auth/client.js';
 import { initGd3dProduto } from "../viewer/advanced/gd3d-produto.js";
+import { disposeMaterialDeep, disposeObject3D } from "../utils/dispose-three.js";
 import * as THREE from "three";
     import { STLLoader } from "three/addons/loaders/STLLoader.js";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
     import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-    import { carregarFbx, revogarUrlsFbx } from "../viewer/advanced/fbx-loader-helper.js";
+    import { revogarUrlsFbx } from "../viewer/advanced/fbx-loader-helper.js";
     import { OFFLoader } from "../viewer/advanced/off-loader.js";
     import { carregar3mf } from "../viewer/advanced/loader-3mf.js";
     import { initFerramentas } from "../viewer/advanced/ferramentas.js";
@@ -14,7 +15,6 @@ import * as THREE from "three";
     import { montarControlesViewport } from "../viewer/advanced/controles-viewport.js";
     import { initPublicarProduto } from "../viewer/advanced/publicar-produto.js";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
-    import { alinharBaseNaMesa, centralizarNaMesa, marcarPosicaoBaseMesa } from "../viewer/advanced/posicionar-na-mesa.js";
 
 (async () => {
     await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
@@ -153,6 +153,7 @@ import * as THREE from "three";
     let secaoFilamentosCache = null;
     let secaoExtensoesCache = null;
     let fbxUrlsAtivas = [];
+    let loadGeneration = 0;
     const gltfLoader = new GLTFLoader();
 
     canvas.addEventListener("pointerdown", (event) => {
@@ -248,30 +249,32 @@ import * as THREE from "three";
       statusEl.className = isError ? "status error" : "status";
     }
 
-    function clearModel() {
-      if (currentModel) {
-        modelPivot.remove(currentModel);
-        currentModel.traverse((child) => {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-            else child.material.dispose();
-          }
-        });
-        currentModel = null;
-        materiaisOriginais.clear();
-        meshComCorVertice.clear();
-        limparCoresModelo();
-        ferramentas?.onModelCleared();
-        extensoes?.onModelCleared();
-        secaoFilamentosCache = null;
-        secaoExtensoesCache = null;
-        revogarUrlsFbx(fbxUrlsAtivas);
-        fbxUrlsAtivas = [];
-        ultimoArquivoFile = null;
-        ultimoArquivosImportados = null;
-        publicarProduto?.onModelCleared();
+    function limparMateriaisOriginais() {
+      for (const lista of materiaisOriginais.values()) {
+        for (const material of lista) disposeMaterialDeep(material);
       }
+      materiaisOriginais.clear();
+      meshComCorVertice.clear();
+    }
+
+    function clearModel() {
+      if (!currentModel) return;
+
+      ferramentas?.onModelCleared();
+      extensoes?.onModelCleared();
+
+      modelPivot.remove(currentModel);
+      limparMateriaisOriginais();
+      limparCoresModelo();
+      disposeObject3D(currentModel);
+      currentModel = null;
+      secaoFilamentosCache = null;
+      secaoExtensoesCache = null;
+      revogarUrlsFbx(fbxUrlsAtivas);
+      fbxUrlsAtivas = [];
+      ultimoArquivoFile = null;
+      ultimoArquivosImportados = null;
+      publicarProduto?.onModelCleared();
     }
 
     function setPanOffset(x, y, z) {
@@ -894,6 +897,8 @@ import * as THREE from "three";
       object.traverse((child) => {
         if (!child.isMesh) return;
 
+        const anterior = child.material;
+
         if (usarCores && materiaisOriginais.has(child.uuid)) {
           const originais = materiaisOriginais.get(child.uuid);
           const clonados = originais.map((material) => {
@@ -906,10 +911,22 @@ import * as THREE from "three";
             return mat;
           });
           child.material = clonados.length === 1 ? clonados[0] : clonados;
-          return;
+        } else {
+          child.material = materialPadrao(child.geometry);
         }
 
-        child.material = materialPadrao(child.geometry);
+        if (anterior && anterior !== child.material) {
+          const originais = materiaisOriginais.get(child.uuid) || [];
+          const refs = new Set(
+            originais.flatMap((material) =>
+              Array.isArray(material) ? material : [material]
+            )
+          );
+          const lista = Array.isArray(anterior) ? anterior : [anterior];
+          for (const material of lista) {
+            if (!refs.has(material)) disposeMaterialDeep(material);
+          }
+        }
       });
     }
 
@@ -1115,6 +1132,7 @@ import * as THREE from "three";
           object = gltf.scene;
           extras.gltf = gltf;
         } else if (ext === "fbx") {
+          const { carregarFbx } = await import("../viewer/advanced/fbx-loader-helper.js");
           const resultadoFbx = await carregarFbx(arquivosRelacionados.length ? arquivosRelacionados : [file]);
           object = resultadoFbx.object;
           extras.fbxUrls = resultadoFbx.urls;
@@ -1136,48 +1154,54 @@ import * as THREE from "three";
     }
 
     async function loadVariosStl(arquivos) {
+      const gen = ++loadGeneration;
       ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros STL…`);
       setStatus(`Carregando ${arquivos.length} ficheiros STL…`);
 
       try {
         const arquivoMeta = await lerMetadadosVariosStl(arquivos);
+        if (gen !== loadGeneration) return;
         ultimoArquivoFile = arquivos[0];
         ultimoArquivosImportados = arquivos;
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const object = await carregarVariosStl(arquivos);
+        if (gen !== loadGeneration) return;
         for (const arquivo of arquivos) {
           ferramentas?.salvarRecente(arquivo);
         }
 
         showModel(criarContainerModelo(object, "stl"), arquivoMeta, { multiStl: true });
       } catch (err) {
-        setStatus(`Erro: ${err.message}`, true);
+        if (gen === loadGeneration) setStatus(`Erro: ${err.message}`, true);
       } finally {
-        ferramentas?.setLoading(false);
+        if (gen === loadGeneration) ferramentas?.setLoading(false);
       }
     }
 
     async function loadFile(file, arquivosRelacionados = []) {
+      const gen = ++loadGeneration;
       const ext = file.name.split(".").pop().toLowerCase();
       ferramentas?.setLoading(true, `Carregando ${file.name}...`);
       setStatus(`Carregando ${file.name}...`);
 
       try {
         const arquivoMeta = await lerMetadadosArquivo(file, ext);
+        if (gen !== loadGeneration) return;
         ultimoArquivoFile = file;
         ultimoArquivosImportados = [file];
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
+        if (gen !== loadGeneration) return;
         if (extras.fbxUrls) fbxUrlsAtivas = extras.fbxUrls;
 
         ferramentas?.salvarRecente(file);
         showModel(criarContainerModelo(object, ext), arquivoMeta, extras);
       } catch (err) {
-        setStatus(`Erro: ${err.message}`, true);
+        if (gen === loadGeneration) setStatus(`Erro: ${err.message}`, true);
       } finally {
-        ferramentas?.setLoading(false);
+        if (gen === loadGeneration) ferramentas?.setLoading(false);
       }
     }
 

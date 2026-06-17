@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { readFilamentColorsFrom3mfFile } from './bambu-colors.mjs';
+import { nomeToSlug as nomeToFolderSlug } from '../lib/slug.mjs';
+
+export { nomeToFolderSlug };
 
 export const PRODUCTS_ROOT = path.join(process.cwd(), 'public', 'products');
 
@@ -18,15 +21,7 @@ export function humanizeSlug(slug) {
 }
 
 /** Slug de pasta a partir do campo `nome` do info.txt */
-export function nomeToFolderSlug(nome) {
-  return String(nome)
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 96);
-}
+export { nomeToFolderSlug as nomeToSlug };
 
 export function productPublicUrl(category, slug, fileName = '', subcategory = null) {
   const segments = [category, subcategory, slug].filter(Boolean).map((s) => encodeURIComponent(s));
@@ -232,9 +227,14 @@ export function readProductMeta(dir, slug, category) {
   const fromTxt = readProductTxt(dir);
 
   const metaPath = path.join(dir, 'product.json');
-  const fromJson = fs.existsSync(metaPath)
-    ? JSON.parse(fs.readFileSync(metaPath, 'utf8'))
-    : {};
+  let fromJson = {};
+  if (fs.existsSync(metaPath)) {
+    try {
+      fromJson = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    } catch (err) {
+      console.warn(`[products] product.json inválido em ${dir}: ${err.message}`);
+    }
+  }
 
   return {
     ...base,

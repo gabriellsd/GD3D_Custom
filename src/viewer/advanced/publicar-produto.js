@@ -2,6 +2,7 @@
  * Publicar modelo carregado como novo produto na loja (Supabase).
  */
 import { getSupabase } from '../../auth/supabase.js';
+import { escapeHtml } from '../../utils/html.js';
 import {
   fetchCloudProducts,
   getNextProductId,
@@ -73,10 +74,10 @@ export function initPublicarProduto({
       const cats = [...new Set(products.map((p) => p.category).filter(Boolean))];
       const subs = [...new Set(products.map((p) => p.subcategory).filter(Boolean))];
       if (catList) {
-        catList.innerHTML = cats.map((c) => `<option value="${c}">`).join('');
+        catList.innerHTML = cats.map((c) => `<option value="${escapeHtml(c)}">`).join('');
       }
       if (subList) {
-        subList.innerHTML = subs.map((s) => `<option value="${s}">`).join('');
+        subList.innerHTML = subs.map((s) => `<option value="${escapeHtml(s)}">`).join('');
       }
     } catch {
       /* datalists opcionais */
