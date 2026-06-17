@@ -1,3 +1,4 @@
+import { readJsonBody } from '../../lib/api-util.mjs';
 import { createSessionToken, sessionCookie } from '../../lib/auth-token.mjs';
 import { verifySupabaseAccessToken, isSupabaseServerConfigured } from '../../lib/supabase-jwt.mjs';
 
@@ -15,8 +16,9 @@ export default async function handler(req, res) {
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
     let accessToken = bearer;
-    if (!accessToken && req.body) {
-      accessToken = req.body.access_token;
+    if (!accessToken) {
+      const body = await readJsonBody(req);
+      accessToken = body.access_token;
     }
 
     const user = await verifySupabaseAccessToken(accessToken);

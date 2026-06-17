@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
+import vercel from 'vite-plugin-vercel';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { authDevPlugin } from './scripts/vite-auth-plugin.mjs';
@@ -97,7 +98,13 @@ function productsSyncPlugin() {
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), authDevPlugin(), serveProductAssetsPlugin(), productsSyncPlugin()],
+  plugins: [
+    tailwindcss(),
+    authDevPlugin(),
+    serveProductAssetsPlugin(),
+    productsSyncPlugin(),
+    vercel(),
+  ],
   server: {
     watch: {
       ignored: ['**/node_modules/**'],
