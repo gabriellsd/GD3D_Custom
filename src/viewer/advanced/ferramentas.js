@@ -21,8 +21,6 @@ const PREFS_PADRAO = {
   regua: false,
   planoCorte: false,
   suportes: false,
-  mesa: false,
-  presetMaterial: "padrao",
   luz: 1.1,
   bgIndex: 0,
 };
@@ -30,78 +28,6 @@ const PREFS_PADRAO = {
 const VELOCIDADE_INERCIA = 0.94;
 const INERCIA_MIN = 0.00015;
 const GIRO_AUTO_VEL = 0.004;
-const CHAVE_RECENTES = "visualizador3d-recentes";
-const MAX_RECENTES = 8;
-const DB_NOME = "visualizador3d";
-const DB_VERSAO = 1;
-const DB_LOJA = "arquivos";
-const MAX_RECENTE_BYTES = 60 * 1024 * 1024;
-
-function abrirDbRecentes() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NOME, DB_VERSAO);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(DB_LOJA)) {
-        req.result.createObjectStore(DB_LOJA, { keyPath: "nome" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function salvarArquivoRecente(arquivo) {
-  const db = await abrirDbRecentes();
-  const dados = await arquivo.arrayBuffer();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readwrite");
-    tx.objectStore(DB_LOJA).put({
-      nome: arquivo.name,
-      formato: arquivo.name.split(".").pop().toLowerCase(),
-      tamanho: arquivo.size,
-      modificado: arquivo.lastModified,
-      tipo: arquivo.type || "",
-      dados,
-      data: Date.now(),
-    });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function lerArquivoRecente(nome) {
-  const db = await abrirDbRecentes();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readonly");
-    const req = tx.objectStore(DB_LOJA).get(nome);
-    req.onsuccess = () => resolve(req.result ?? null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function limparArquivosRecentesExceto(nomes) {
-  const db = await abrirDbRecentes();
-  const permitidos = new Set(nomes);
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DB_LOJA, "readwrite");
-    const loja = tx.objectStore(DB_LOJA);
-    const req = loja.getAllKeys();
-    req.onsuccess = () => {
-      for (const chave of req.result) {
-        if (!permitidos.has(chave)) loja.delete(chave);
-      }
-    };
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-function escapeHtml(texto) {
-  return texto
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/"/g, "&quot;");
-}
 
 export function initFerramentas(app) {
   const estado = {
@@ -141,7 +67,6 @@ export function initFerramentas(app) {
   let dirLight = null;
 
   const overlay = document.getElementById("loading-overlay");
-  const listaRecentes = document.getElementById("lista-recentes");
   const painelAnim = document.getElementById("painel-animacao");
   const btnAnim = document.getElementById("btn-animacao");
 
@@ -545,10 +470,6 @@ export function initFerramentas(app) {
     chk("chk-regua", prefs.regua);
     chk("chk-plano-corte", prefs.planoCorte);
     chk("chk-suportes", prefs.suportes);
-    chk("chk-mesa", prefs.mesa);
-    chk("chk-mesa-overlay", prefs.mesa);
-    const selMat = document.getElementById("sel-material");
-    if (selMat && prefs.presetMaterial) selMat.value = prefs.presetMaterial;
 
     const sliderLuz = document.getElementById("slider-luz");
     if (sliderLuz) sliderLuz.value = prefs.luz;
@@ -565,7 +486,6 @@ export function initFerramentas(app) {
     dispararChange("chk-overhangs");
     dispararChange("chk-regua");
     dispararChange("chk-plano-corte");
-    dispararChange("chk-mesa");
     dispararChange("slider-luz");
   }
 
@@ -615,68 +535,6 @@ export function initFerramentas(app) {
     link.href = app.canvas.toDataURL("image/png");
     link.click();
     app.setStatus("Captura de tela salva");
-  }
-
-  async function salvarRecente(arquivo) {
-    try {
-      const entrada = {
-        nome: arquivo.name,
-        formato: arquivo.name.split(".").pop().toLowerCase(),
-        tamanho: arquivo.size,
-        data: Date.now(),
-        emCache: false,
-      };
-
-      if (arquivo.size <= MAX_RECENTE_BYTES) {
-        try {
-          await salvarArquivoRecente(arquivo);
-          entrada.emCache = true;
-        } catch {
-          entrada.emCache = false;
-        }
-      }
-
-      const lista = JSON.parse(localStorage.getItem(CHAVE_RECENTES) || "[]");
-      const filtrada = lista.filter((i) => i.nome !== entrada.nome);
-      filtrada.unshift(entrada);
-      const mantidos = filtrada.slice(0, MAX_RECENTES);
-      localStorage.setItem(CHAVE_RECENTES, JSON.stringify(mantidos));
-      await limparArquivosRecentesExceto(mantidos.map((i) => i.nome));
-      renderizarRecentes();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  async function abrirRecente(nome) {
-    const registro = await lerArquivoRecente(nome);
-    if (!registro?.dados) {
-      app.setStatus(
-        `Abra "${nome}" novamente pelo botão Abrir modelo para guardar em cache`,
-        true
-      );
-      return;
-    }
-    const file = new File([registro.dados], registro.nome, {
-      type: registro.tipo,
-      lastModified: registro.modificado || Date.now(),
-    });
-    app.loadFile(file);
-  }
-
-  function renderizarRecentes() {
-    if (!listaRecentes) return;
-    const lista = JSON.parse(localStorage.getItem(CHAVE_RECENTES) || "[]");
-    if (!lista.length) {
-      listaRecentes.innerHTML = '<p class="info-vazio">Nenhum recente</p>';
-      return;
-    }
-    listaRecentes.innerHTML = lista
-      .map(
-        (i) =>
-          `<button type="button" class="btn-recente" data-nome="${escapeHtml(i.nome)}" title="${escapeHtml(i.nome)}">${escapeHtml(i.nome)}</button>`
-      )
-      .join("");
   }
 
   function pararAnimacao() {
@@ -927,14 +785,6 @@ export function initFerramentas(app) {
       }
     });
 
-    listaRecentes?.addEventListener("click", (e) => {
-      const btn = e.target.closest(".btn-recente");
-      if (!btn?.dataset.nome) return;
-      abrirRecente(btn.dataset.nome).catch((err) => {
-        app.setStatus(`Erro ao abrir recente: ${err.message}`, true);
-      });
-    });
-
     const params = new URLSearchParams(location.search);
     const modeloUrl = params.get("modelo");
     if (modeloUrl && !params.get("sessao") && !params.get("produto")) {
@@ -953,7 +803,6 @@ export function initFerramentas(app) {
         .catch((err) => app.setStatus(`URL: ${err.message}`, true));
     }
 
-    renderizarRecentes();
     aplicarPreferencias();
     setLoading(false);
   }
@@ -967,7 +816,6 @@ export function initFerramentas(app) {
     onPointerMoveDrag,
     onModelLoaded,
     onModelCleared,
-    salvarRecente,
     aplicarFiltroCor,
     cameraAtiva,
     sincronizarCameras,
@@ -984,6 +832,13 @@ export function initFerramentas(app) {
     lerPreferencias,
     aplicarPreferencias,
     atualizarToggleSuportes,
+    desativarGiroAuto() {
+      estado.giroAuto = false;
+      const el = document.getElementById('chk-giro-auto');
+      if (el) el.checked = false;
+      salvarPreferencias({ giroAuto: false });
+    },
+    atualizarBbox,
     aplicarSuportes,
   };
 }

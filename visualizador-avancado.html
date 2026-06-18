@@ -20,8 +20,30 @@
   <main class="viewer-advanced-main">
     <div class="viewer-advanced-root">
       <aside>
-        <div>
+        <div class="viewer-aside-header">
           <h2 class="viewer-aside-title">Controles</h2>
+          <div id="viewer-aside-nav" class="viewer-aside-nav-slot"></div>
+        </div>
+
+        <div class="painel-items-wrap" id="painel-items">
+          <div class="painel-items-header">
+            <span class="painel-items-titulo">Items</span>
+            <div class="painel-items-acoes">
+              <button type="button" id="items-btn-abrir" class="painel-items-btn" title="Abrir modelo">
+                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="items-btn-remover" class="painel-items-btn" title="Remover selecionado">
+                <i class="fa-solid fa-square-minus" aria-hidden="true"></i>
+              </button>
+              <button type="button" id="items-btn-adicionar" class="painel-items-btn" title="Adicionar ficheiros">
+                <i class="fa-solid fa-square-plus" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div class="painel-items-arvore" id="painel-items-arvore">
+            <p class="painel-items-vazio">Nenhum item</p>
+          </div>
+          <input id="items-file-input" type="file" multiple hidden accept=".obj,.stl,.ply,.glb,.gltf,.3mf,.mf3,.off,.fbx,.amf,.gcode,.gco,.zip,.step,.stp,.png,.jpg,.jpeg,.tga" />
         </div>
 
         <div id="gd3d-produto-painel" class="gd3d-produto-painel hidden">
@@ -30,197 +52,7 @@
         </div>
 
         <div class="acoes">
-          <div class="acoes-principais">
-            <label class="btn btn-primary upload">
-              <i class="fa-solid fa-folder-open"></i>
-              Abrir modelo
-              <input id="file-input" type="file" accept=".obj,.stl,.ply,.glb,.gltf,.3mf,.mf3,.off,.fbx,.amf,.gcode,.gco,.zip,.step,.stp,.png,.jpg,.jpeg,.tga" multiple />
-            </label>
-          </div>
-
           <div id="painel-pos-modelo" class="painel-pos-modelo hidden">
-
-          <div class="info-section">
-            <button type="button" class="info-section-header" aria-expanded="false">
-              <span class="info-chevron">▸</span>Exibição
-            </button>
-            <div class="info-section-body painel-opcoes-body">
-
-            <label class="toggle-linha">
-              <span>Cores originais</span>
-              <input type="checkbox" id="chk-cores" checked />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Wireframe</span>
-              <input type="checkbox" id="chk-wireframe" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Giro automático</span>
-              <input type="checkbox" id="chk-giro-auto" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Sombra no chão</span>
-              <input type="checkbox" id="chk-sombra" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Caixa delimitadora</span>
-              <input type="checkbox" id="chk-bbox" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Referência 1 cm</span>
-              <input type="checkbox" id="chk-referencia" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Ortográfico</span>
-              <input type="checkbox" id="chk-ortografico" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Overhangs (&gt;45°)</span>
-              <input type="checkbox" id="chk-overhangs" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Régua (2 cliques)</span>
-              <input type="checkbox" id="chk-regua" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha">
-              <span>Plano de corte</span>
-              <input type="checkbox" id="chk-plano-corte" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <label class="toggle-linha hidden" id="linha-suportes">
-              <span>Mostrar suportes</span>
-              <input type="checkbox" id="chk-suportes" />
-              <span class="toggle-ui"></span>
-            </label>
-
-            <div class="slider-linha">
-              <span>Iluminação</span>
-              <input type="range" id="slider-luz" min="0.2" max="2.5" step="0.05" value="1.1" />
-            </div>
-
-            <div class="slider-linha">
-              <span>Altura do corte</span>
-              <input type="range" id="slider-plano-corte" min="-10" max="10" step="0.01" value="0" />
-            </div>
-
-            <div class="opcao-grupo">
-              <span class="opcao-label">Fundo</span>
-              <div class="fundos" id="fundos">
-                <button type="button" class="fundo-btn ativo" data-index="0" style="background:#080808" title="Escuro" aria-label="Fundo escuro"></button>
-                <button type="button" class="fundo-btn" data-index="1" style="background:#141414" title="Painel" aria-label="Fundo painel"></button>
-                <button type="button" class="fundo-btn" data-index="2" style="background:#ffffff;border-color:#475569" title="Branco" aria-label="Fundo branco"></button>
-                <button type="button" class="fundo-btn" data-index="3" style="background:#2d2d2d" title="Cinza" aria-label="Fundo cinza"></button>
-              </div>
-            </div>
-
-            <div class="opcao-grupo">
-              <span class="opcao-label">Vistas</span>
-              <div class="btn-row">
-                <button type="button" class="btn btn-secundario btn-vista" data-vista="frente">Frente</button>
-                <button type="button" class="btn btn-secundario btn-vista" data-vista="topo">Topo</button>
-                <button type="button" class="btn btn-secundario btn-vista" data-vista="lateral">Lateral</button>
-                <button type="button" class="btn btn-secundario btn-vista" data-vista="iso">Iso</button>
-              </div>
-            </div>
-
-            </div>
-          </div>
-
-          <div class="info-section">
-            <button type="button" class="info-section-header" aria-expanded="false">
-              <span class="info-chevron">▸</span>Impressão 3D
-            </button>
-            <div class="info-section-body painel-opcoes-body">
-              <label class="toggle-linha">
-                <span>Mesa de impressão</span>
-                <input type="checkbox" id="chk-mesa" />
-                <span class="toggle-ui"></span>
-              </label>
-              <label class="select-linha">
-                <span>Tamanho da mesa</span>
-                <select id="sel-mesa"></select>
-              </label>
-              <p id="mesa-status" class="aviso-ok"></p>
-              <div class="posicao-mesa-grupo hidden" id="grupo-posicao-mesa">
-                <div class="btn-row">
-                  <button type="button" class="btn btn-secundario" id="btn-recentrar-mesa" title="Centrar na mesa e assentar na base">
-                    <i class="fa-solid fa-crosshairs"></i> Recentrar
-                  </button>
-                  <button type="button" class="btn btn-secundario" id="btn-assentar-mesa" title="Só alinhar a base em y = 0">
-                    Assentar
-                  </button>
-                </div>
-                <div class="slider-linha">
-                  <span>Posição X na mesa (mm) <output id="val-mesa-x" class="slider-val">0</output></span>
-                  <input type="range" id="slider-mesa-x" min="-120" max="120" step="1" value="0" />
-                </div>
-                <div class="slider-linha">
-                  <span>Posição Z na mesa (mm) <output id="val-mesa-z" class="slider-val">0</output></span>
-                  <input type="range" id="slider-mesa-z" min="-120" max="120" step="1" value="0" />
-                </div>
-              </div>
-              <button type="button" class="btn btn-secundario" id="btn-auto-orient">Auto-orientar</button>
-              <label class="input-linha">
-                <span>Escalar maior dimensão (mm)</span>
-                <input type="number" id="input-escala-mm" min="1" step="0.1" placeholder="ex: 100" />
-              </label>
-              <button type="button" class="btn btn-secundario" id="btn-escala">Aplicar escala</button>
-            </div>
-          </div>
-
-          <div class="info-section">
-            <button type="button" class="info-section-header" aria-expanded="false">
-              <span class="info-chevron">▸</span>Peças e comparação
-            </button>
-            <div class="info-section-body painel-opcoes-body">
-              <div class="arvore-pecas" id="arvore-pecas">
-                <p class="info-vazio">Nenhuma peça</p>
-              </div>
-              <button type="button" class="btn btn-secundario" id="btn-juntar-pecas" title="Monta peças do 3MF na pose de montagem (não na mesa) e une num único mesh">
-                <i class="fa-solid fa-object-group"></i> Montar peças
-              </button>
-              <p class="atalhos">Une peças num único modelo na pose montada (lado a lado). Oculte peças na lista para excluir alguma.</p>
-              <label class="select-linha">
-                <span>Material preview</span>
-                <select id="sel-material"></select>
-              </label>
-              <label class="select-linha">
-                <span>Comparar com</span>
-                <input id="input-comparacao" type="file" accept=".obj,.stl,.ply,.glb,.gltf,.3mf,.off,.fbx" />
-              </label>
-              <label class="select-linha">
-                <span>Modo comparação</span>
-                <select id="sel-modo-comparacao">
-                  <option value="ghost">Sobreposto (fantasma)</option>
-                  <option value="lado">Lado a lado</option>
-                </select>
-              </label>
-              <div class="slider-linha">
-                <span>Opacidade comparação</span>
-                <input type="range" id="slider-opacidade-comp" min="0.1" max="1" step="0.05" value="0.45" />
-              </div>
-              <button type="button" class="btn btn-secundario" id="btn-limpar-comparacao">Limpar comparação</button>
-            </div>
-          </div>
 
           <div class="info-section hidden" id="secao-gcode">
             <button type="button" class="info-section-header" aria-expanded="true">
@@ -300,16 +132,6 @@
 
           </div>
 
-          <div class="info-section">
-            <button type="button" class="info-section-header" aria-expanded="false">
-              <span class="info-chevron">▸</span>Recentes
-            </button>
-            <div class="info-section-body painel-opcoes-body">
-              <div class="lista-recentes" id="lista-recentes">
-                <p class="info-vazio">Nenhum recente</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="info-panel" id="info-panel">

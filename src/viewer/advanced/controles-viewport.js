@@ -9,90 +9,207 @@ const VISTAS = [
   { id: "fundo", title: "Fundo" },
 ];
 
-export function montarControlesViewport(container) {
-  if (!container || container.querySelector(".viewer-barra-inferior")) return;
+const EXIBICAO_TOGGLES = [
+  { id: "chk-cores", icon: "fa-palette", title: "Cores originais", checked: true },
+  { id: "chk-wireframe", icon: "fa-border-all", title: "Wireframe (W)" },
+  { id: "chk-giro-auto", icon: "fa-rotate", title: "Giro automático" },
+  { id: "chk-sombra", icon: "fa-cloud-sun", title: "Sombra no chão" },
+  { id: "chk-bbox", icon: "fa-box", title: "Caixa delimitadora" },
+  { id: "chk-referencia", icon: "fa-ruler-horizontal", title: "Referência 1 cm" },
+  { id: "chk-ortografico", icon: "fa-square", title: "Ortográfico" },
+  { id: "chk-overhangs", icon: "fa-triangle-exclamation", title: "Overhangs (>45°)" },
+  { id: "chk-regua", icon: "fa-ruler-combined", title: "Régua (2 cliques)" },
+  { id: "chk-plano-corte", icon: "fa-scissors", title: "Plano de corte" },
+  {
+    id: "chk-suportes",
+    icon: "fa-layer-group",
+    title: "Mostrar suportes",
+    linhaId: "linha-suportes",
+    hidden: true,
+  },
+];
 
-  const barra = document.createElement("div");
-  barra.className = "viewer-barra-inferior";
-  barra.innerHTML = `
-    <label class="pill-cama">
-      <input type="checkbox" id="chk-mesa-overlay" />
-      <span class="pill-cama-switch" aria-hidden="true"><span class="pill-cama-knob"></span></span>
-      <span class="pill-cama-label">Mostre a cama</span>
+function renderExibicaoToggle(opcao) {
+  const checkedAttr = opcao.checked ? " checked" : "";
+  const labelClass = opcao.hidden ? "barra-exibicao-toggle hidden" : "barra-exibicao-toggle";
+  const labelId = opcao.linhaId ? ` id="${opcao.linhaId}"` : "";
+  return `
+    <label class="${labelClass}"${labelId} title="${opcao.title}">
+      <input type="checkbox" id="${opcao.id}"${checkedAttr} />
+      <span class="barra-vistas-btn"><i class="fa-solid ${opcao.icon}" aria-hidden="true"></i></span>
+      <span class="barra-flyout-item-label">${opcao.title}</span>
+    </label>`;
+}
+
+function renderVistasFlyout() {
+  return `
+    <button type="button" class="barra-vistas-btn barra-flyout-vista" id="btn-vista-centrar" title="Centrar (R)">
+      <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+      <span class="barra-flyout-item-label">Centrar</span>
+    </button>
+    ${VISTAS.map(
+      (v) =>
+        `<button type="button" class="barra-vistas-btn btn-vista barra-flyout-vista" data-vista="${v.id}" title="${v.title}">${svgVista(v.id)}<span class="barra-flyout-item-label">${v.title}</span></button>`
+    ).join("")}`;
+}
+
+function renderFerramentasFlyout() {
+  const itens = [
+    { id: "btn-screenshot", icon: "fa-camera", label: "Captura (S)" },
+    { id: "btn-png-alpha", icon: "fa-image", label: "PNG transparente" },
+    { id: "btn-gif-giro", icon: "fa-clapperboard", label: "Vídeo giro" },
+    { id: "btn-fullscreen", icon: "fa-expand", label: "Tela cheia (F)" },
+    { id: "btn-ar", icon: "fa-vr-cardboard", label: "Ver em AR", hidden: true },
+    { id: "btn-compartilhar", icon: "fa-share-nodes", label: "Compartilhar" },
+  ];
+  return itens
+    .map(
+      ({ id, icon, label, hidden }) =>
+        `<button type="button" class="barra-vistas-btn barra-flyout-acao${hidden ? " hidden" : ""}" id="${id}" title="${label}">
+          <i class="fa-solid ${icon}" aria-hidden="true"></i>
+          <span class="barra-flyout-item-label">${label}</span>
+        </button>`
+    )
+    .join("");
+}
+
+function renderAmbienteFlyout() {
+  return `
+    <label class="barra-flyout-slider">
+      <span class="barra-flyout-slider-label"><i class="fa-solid fa-sun" aria-hidden="true"></i> Iluminação</span>
+      <input type="range" id="slider-luz" min="0.2" max="2.5" step="0.05" value="1.1" />
     </label>
-    <div class="barra-vistas" role="toolbar" aria-label="Vistas da câmera">
-      <button type="button" class="barra-vistas-btn" id="btn-vista-centrar" title="Centrar (R)">
-        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
-      </button>
-      <span class="barra-vistas-sep" aria-hidden="true"></span>
-      ${VISTAS.map(
-        (v) =>
-          `<button type="button" class="barra-vistas-btn btn-vista" data-vista="${v.id}" title="${v.title}">${svgVista(v.id)}</button>`
-      ).join("")}
-    </div>
-    <div class="barra-ferramentas" role="toolbar" aria-label="Ferramentas">
-      <button type="button" class="barra-vistas-btn barra-ferramentas-toggle" title="Ferramentas" aria-expanded="false" aria-label="Abrir ferramentas">
-        <i class="fa-solid fa-camera" aria-hidden="true"></i>
-      </button>
-      <div class="barra-ferramentas-itens">
-      <button type="button" class="barra-vistas-btn" id="btn-screenshot" title="Captura (S)">
-        <i class="fa-solid fa-camera" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="barra-vistas-btn" id="btn-png-alpha" title="PNG transparente">
-        <i class="fa-solid fa-image" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="barra-vistas-btn" id="btn-gif-giro" title="Vídeo giro">
-        <i class="fa-solid fa-clapperboard" aria-hidden="true"></i>
-      </button>
-      <span class="barra-vistas-sep" aria-hidden="true"></span>
-      <button type="button" class="barra-vistas-btn" id="btn-fullscreen" title="Tela cheia (F)">
-        <i class="fa-solid fa-expand" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="barra-vistas-btn hidden" id="btn-ar" title="Ver em AR">
-        <i class="fa-solid fa-vr-cardboard" aria-hidden="true"></i>
-      </button>
-      <button type="button" class="barra-vistas-btn" id="btn-compartilhar" title="Compartilhar sessão">
-        <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
-      </button>
+    <label class="barra-flyout-slider">
+      <span class="barra-flyout-slider-label"><i class="fa-solid fa-grip-lines" aria-hidden="true"></i> Altura do corte</span>
+      <input type="range" id="slider-plano-corte" min="-10" max="10" step="0.01" value="0" />
+    </label>
+    <div class="barra-flyout-fundos">
+      <span class="barra-flyout-fundos-label">Fundo</span>
+      <div class="barra-flyout-fundos-swatches fundos" id="fundos">
+        <button type="button" class="fundo-btn ativo" data-index="0" style="background:#080808" title="Escuro" aria-label="Fundo escuro"></button>
+        <button type="button" class="fundo-btn" data-index="1" style="background:#141414" title="Painel" aria-label="Fundo painel"></button>
+        <button type="button" class="fundo-btn" data-index="2" style="background:#ffffff;border-color:#475569" title="Branco" aria-label="Fundo branco"></button>
+        <button type="button" class="fundo-btn" data-index="3" style="background:#2d2d2d" title="Cinza" aria-label="Fundo cinza"></button>
       </div>
     </div>`;
+}
 
-  container.appendChild(barra);
+function renderGrupo({ id, icon, title, conteudo, layout = "col" }) {
+  return `
+    <div class="barra-grupo-tool" data-grupo="${id}">
+      <button type="button" class="barra-grupo-trigger barra-vistas-btn" title="${title}" aria-label="${title}" aria-haspopup="true" aria-expanded="false">
+        <i class="fa-solid ${icon}" aria-hidden="true"></i>
+      </button>
+      <div class="barra-grupo-flyout barra-grupo-flyout--${layout}" role="group" aria-label="${title}">
+        <span class="barra-grupo-flyout-titulo">${title}</span>
+        <div class="barra-grupo-flyout-corpo">
+          ${conteudo}
+        </div>
+      </div>
+    </div>`;
+}
 
-  const ferramentas = barra.querySelector(".barra-ferramentas");
-  const toggle = barra.querySelector(".barra-ferramentas-toggle");
+function initBarraGrupos(root) {
+  const grupos = root.querySelectorAll(".barra-grupo-tool");
   let fecharTimer = null;
 
-  function setAberta(aberta) {
-    ferramentas?.classList.toggle("barra-ferramentas-aberta", aberta);
-    toggle?.setAttribute("aria-expanded", aberta ? "true" : "false");
+  function setAberto(grupo, aberto) {
+    grupo.classList.toggle("barra-grupo-aberto", aberto);
+    grupo.querySelector(".barra-grupo-trigger")?.setAttribute("aria-expanded", aberto ? "true" : "false");
   }
 
-  toggle?.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setAberta(!ferramentas?.classList.contains("barra-ferramentas-aberta"));
-  });
+  function fecharTodos(exceto = null) {
+    if (fecharTimer) {
+      clearTimeout(fecharTimer);
+      fecharTimer = null;
+    }
+    grupos.forEach((grupo) => {
+      if (grupo === exceto) return;
+      setAberto(grupo, false);
+    });
+  }
 
-  ferramentas?.addEventListener("mouseenter", () => {
-    if (fecharTimer) clearTimeout(fecharTimer);
-    setAberta(true);
-  });
+  function abrir(grupo) {
+    if (fecharTimer) {
+      clearTimeout(fecharTimer);
+      fecharTimer = null;
+    }
+    fecharTodos(grupo);
+    setAberto(grupo, true);
+  }
 
-  ferramentas?.addEventListener("mouseleave", () => {
-    fecharTimer = setTimeout(() => setAberta(false), 320);
+  grupos.forEach((grupo) => {
+    const trigger = grupo.querySelector(".barra-grupo-trigger");
+    const flyout = grupo.querySelector(".barra-grupo-flyout");
+
+    trigger?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (grupo.classList.contains("barra-grupo-aberto")) {
+        setAberto(grupo, false);
+      } else {
+        abrir(grupo);
+      }
+    });
+
+    grupo.addEventListener("mouseenter", () => abrir(grupo));
+
+    grupo.addEventListener("mouseleave", () => {
+      fecharTimer = setTimeout(() => setAberto(grupo, false), 280);
+    });
+
+    flyout?.addEventListener("mousedown", (e) => e.stopPropagation());
   });
 
   document.addEventListener("pointerdown", (e) => {
-    if (!ferramentas?.classList.contains("barra-ferramentas-aberta")) return;
-    if (ferramentas.contains(e.target)) return;
-    setAberta(false);
+    if (root.contains(e.target)) return;
+    fecharTodos();
   });
 }
 
-export function sincronizarToggleMesa(ativo) {
-  for (const id of ["chk-mesa", "chk-mesa-overlay"]) {
-    const el = document.getElementById(id);
-    if (el) el.checked = ativo;
+function montarBarraLateralExibicao(container) {
+  const lateral = document.createElement("div");
+  lateral.className = "viewer-barra-lateral";
+  lateral.innerHTML = `
+    <nav class="barra-lateral barra-exibicao-lateral" role="toolbar" aria-label="Controles do viewport">
+      ${renderGrupo({
+        id: "exibicao",
+        icon: "fa-eye",
+        title: "Exibição",
+        layout: "grid",
+        conteudo: EXIBICAO_TOGGLES.map(renderExibicaoToggle).join(""),
+      })}
+      ${renderGrupo({
+        id: "ambiente",
+        icon: "fa-sun",
+        title: "Ambiente",
+        layout: "stack",
+        conteudo: renderAmbienteFlyout(),
+      })}
+      ${renderGrupo({
+        id: "vistas",
+        icon: "fa-cube",
+        title: "Vistas",
+        layout: "grid",
+        conteudo: renderVistasFlyout(),
+      })}
+      ${renderGrupo({
+        id: "ferramentas",
+        icon: "fa-wand-magic-sparkles",
+        title: "Ferramentas",
+        layout: "lista",
+        conteudo: renderFerramentasFlyout(),
+      })}
+    </nav>`;
+
+  container.appendChild(lateral);
+  initBarraGrupos(lateral.querySelector(".barra-exibicao-lateral"));
+}
+
+export function montarControlesViewport(container) {
+  if (!container) return;
+
+  if (!container.querySelector(".viewer-barra-lateral")) {
+    montarBarraLateralExibicao(container);
   }
 }

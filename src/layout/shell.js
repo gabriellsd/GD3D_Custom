@@ -11,10 +11,11 @@ export async function initShell({ page, title }) {
   document.title = title;
   document.body.classList.add('site-bg');
 
-  const hideChromeActions = page === 'viewer-advanced';
+  const hideHeader = page === 'viewer-advanced';
+  const hideChromeActions = hideHeader;
   const chrome = document.getElementById('site-chrome');
   if (chrome) {
-    chrome.innerHTML = renderHeader(page, { hideChromeActions }) + renderOverlays();
+    chrome.innerHTML = (hideHeader ? '' : renderHeader(page, { hideChromeActions })) + renderOverlays();
   }
 
   const footerSlot = document.getElementById('site-footer');
@@ -35,8 +36,7 @@ export async function initShell({ page, title }) {
 
 function syncHeaderOffset() {
   const header = document.getElementById('site-header');
-  if (!header) return;
-  const height = header.offsetHeight;
+  const height = header?.offsetHeight ?? 0;
   document.documentElement.style.setProperty('--header-offset', `${height}px`);
 }
 

@@ -57,39 +57,40 @@ export function renderViewerToolbar() {
     <div class="viewer-toolbar-actions flex items-center gap-2 sm:gap-3 shrink-0">${renderHeaderActions()}</div>`;
 }
 
-export function renderViewerInlineHeader() {
+/** Atalhos do visualizador técnico (painel lateral). */
+export function renderViewerAsideNav() {
   return `
-    <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-      <a href="/admin.html" class="viewer-toolbar-btn" title="Painel admin">
-        <i class="fa-solid fa-arrow-left"></i>
-        <span class="hidden sm:inline">Painel</span>
+    <div class="viewer-aside-nav">
+      <a href="/admin.html" class="viewer-toolbar-btn viewer-toolbar-btn--compact" title="Painel admin">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+        <span>Painel</span>
       </a>
-      <a href="/" class="viewer-toolbar-btn viewer-toolbar-btn--primary" title="Ir ao site">
-        <i class="fa-solid fa-store"></i>
-        <span class="hidden sm:inline">Loja</span>
+      <a href="/" class="viewer-toolbar-btn viewer-toolbar-btn--compact viewer-toolbar-btn--primary" title="Ir ao site">
+        <i class="fa-solid fa-store" aria-hidden="true"></i>
+        <span>Loja</span>
       </a>
     </div>`;
 }
 
 export function renderHeader(activePage, { hideChromeActions = false } = {}) {
-  const showViewerInline = activePage === 'viewer-advanced';
+  const showViewerAdvanced = activePage === 'viewer-advanced';
   const links = NAV.map(({ id, href, label }) => {
     const active = id === activePage;
     return `<a href="${href}" class="${navLinkClass(active)}">${label}</a>`;
   }).join('');
 
   return `
-    <header id="site-header" class="fixed inset-x-0 top-0 z-[60] backdrop-blur-md bg-[#080808]/95 border-b border-brand-900/80">
+    <header id="site-header" class="fixed inset-x-0 top-0 z-[60] backdrop-blur-md border-b ${showViewerAdvanced ? 'site-header--viewer-advanced' : 'bg-[#080808]/95 border-brand-900/80'}">
         <div class="w-full px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between gap-2 sm:gap-3 h-[5rem] sm:h-[5.5rem]">
                 <a href="/" class="site-header-logo flex items-center h-full shrink-0 min-w-0 max-w-[48%] sm:max-w-[44%] md:max-w-none" aria-label="GD3D — Início">
                     <img src="/logo/gd3d-header.png" alt="GD3D" class="h-12 sm:h-14 md:h-16 lg:h-[4.75rem] w-auto max-w-[min(100%,300px)] lg:max-w-[360px] object-contain object-left" width="360" height="135" />
                 </a>
-                <nav class="hidden lg:flex items-center gap-6 shrink-0">${links}</nav>
-                ${showViewerInline ? renderViewerInlineHeader() : (hideChromeActions ? '' : renderSearchBar())}
-                ${showViewerInline ? '' : (hideChromeActions ? '' : `<div class="flex items-center gap-2 sm:gap-3 shrink-0">${renderHeaderActions()}</div>`)}
+                <nav class="${showViewerAdvanced ? 'hidden' : 'hidden lg:flex'} items-center gap-6 shrink-0 ml-auto">${links}</nav>
+                ${showViewerAdvanced ? '' : (hideChromeActions ? '' : renderSearchBar())}
+                ${showViewerAdvanced ? '' : (hideChromeActions ? '' : `<div class="flex items-center gap-2 sm:gap-3 shrink-0">${renderHeaderActions()}</div>`)}
             </div>
-            <nav class="flex lg:hidden gap-4 overflow-x-auto pb-3 -mt-1 text-sm">${links}</nav>
+            ${showViewerAdvanced ? '' : `<nav class="flex lg:hidden gap-4 overflow-x-auto pb-3 -mt-1 text-sm">${links}</nav>`}
         </div>
     </header>`;
 }

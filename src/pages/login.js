@@ -1,5 +1,6 @@
 import { initShell } from '../layout/shell.js';
-import { fetchSession, login, signUp } from '../auth/client.js';
+import { fetchSession, login, signUp, isSupabaseEnabled } from '../auth/client.js';
+import { ensureSupabaseConfig } from '../auth/supabase.js';
 
 function safeNextPath(next) {
   if (!next || !next.startsWith('/') || next.startsWith('//')) return '/';
@@ -68,6 +69,15 @@ altBtn?.addEventListener('click', () => {
 });
 
 setMode('login');
+
+ensureSupabaseConfig().then((supabaseReady) => {
+  const hint = document.getElementById('login-dev-hint');
+  if (!hint || supabaseReady || isSupabaseEnabled()) return;
+
+  hint.textContent =
+    'Modo local (sem Supabase): use admin@gd3d.local / admin123 ou cliente@example.com / cliente123. Para contas reais, corra npm run supabase:setup.';
+  hint.classList.remove('hidden');
+});
 
 fetchSession().then((user) => {
   if (!user) return;

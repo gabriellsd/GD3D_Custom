@@ -14,10 +14,13 @@ import * as THREE from "three";
     import { montarControlesViewport } from "../viewer/advanced/controles-viewport.js";
     import { initPublicarProduto } from "../viewer/advanced/publicar-produto.js";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
-    import { alinharBaseNaMesa, centralizarNaMesa, marcarPosicaoBaseMesa } from "../viewer/advanced/posicionar-na-mesa.js";
+    import { initPainelItems, nomeGrupoImportacao } from "../viewer/advanced/painel-items.js";
+    import { renderViewerAsideNav } from "../layout/header.js";
+    import { extrairCoresDoObject, metaBambuDoObject } from "../viewer/advanced/cores-modelo.js";
 
 (async () => {
     await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
+    document.getElementById("viewer-aside-nav")?.insertAdjacentHTML("beforeend", renderViewerAsideNav());
     const user = await requireRole('admin');
     if (!user) return;
     document.body.classList.add('viewer-advanced-active');
@@ -146,6 +149,7 @@ import * as THREE from "three";
 
     let ferramentas = null;
     let extensoes = null;
+    let painelItems = null;
     let ultimoFormato = "STL";
     let ultimoArquivoFile = null;
     let ultimoArquivosImportados = null;
@@ -180,7 +184,9 @@ import * as THREE from "three";
       drag.active = false;
       drag.panning = false;
       ferramentas?.onPointerUp();
-      canvas.releasePointerCapture(event.pointerId);
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
     });
 
     canvas.addEventListener("pointermove", (event) => {
@@ -277,6 +283,40 @@ import * as THREE from "three";
         publicarProduto?.onModelCleared();
         setPainelPosModelo(false);
       }
+      painelItems?.resetEstado();
+    }
+
+    function ensureItemsRoot() {
+      if (!currentModel) {
+        currentModel = new THREE.Group();
+        currentModel.name = "items-root";
+        modelPivot.add(currentModel);
+      }
+      return currentModel;
+    }
+
+    function sincronizarAposItemsAlterados() {
+      if (!painelItems?.temItems()) {
+        clearModel();
+        placeholder.classList.remove("hidden");
+        infoPanel.innerHTML = "";
+        setStatus("Modelo removido");
+        return;
+      }
+      if (!currentModel) return;
+      currentModel.updateMatrixWorld(true);
+      const geo = analisarGeometria(currentModel);
+      const caixa = new THREE.Box3().setFromObject(currentModel);
+      geo.tamanho = caixa.getSize(new THREE.Vector3());
+      geo.centro = caixa.getCenter(new THREE.Vector3());
+      geo.diagonal = geo.tamanho.length();
+      renderizarPainel(montarSecoesUltimo(geo));
+      extensoes?.onModelLoaded(currentModel, {
+        ...ultimoExtras,
+        bambuImpressao: ultimoExtras?.bambu?.bambuImpressao,
+        formato: ultimoFormato,
+      });
+      atualizarCoresUi();
     }
 
     function setPanOffset(x, y, z) {
@@ -313,30 +353,12 @@ import * as THREE from "three";
       return secoes;
     }
 
-    function mesaAtiva() {
-      return (
-        document.getElementById("chk-mesa")?.checked ||
-        document.getElementById("chk-mesa-overlay")?.checked
-      );
-    }
-
-    function deveAlinharNaMesa(opcoes = {}) {
-      if (opcoes.naMesa != null) return opcoes.naMesa;
-      return mesaAtiva() || ultimoFormato === "3MF" || Boolean(ultimoExtras?.bambu);
-    }
-
-    function centerAndFrame(object, opcoes = {}) {
+    function centerAndFrame(object) {
       object.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(object);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      const naMesa = deveAlinharNaMesa(opcoes);
-
-      if (naMesa) {
-        centralizarNaMesa(object);
-      } else {
-        object.position.sub(center);
-      }
+      object.position.sub(center);
 
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
       cameraDistance = maxDim * 2.5;
@@ -616,32 +638,39 @@ import * as THREE from "three";
       return arquivo.name.replace(/\.[^.]+$/, "");
     }
 
-    async function lerMetadadosVariosStl(arquivos) {
+    async function lerMetadadosVariosArquivos(arquivos) {
       const nomes = arquivos.map((a) => a.name);
       const totalBytes = arquivos.reduce((s, f) => s + f.size, 0);
-      const tipos = await Promise.all(arquivos.map((a) => detectarTipoStl(a)));
-      const ascii = tipos.filter((t) => t === "ASCII").length;
-      const binario = tipos.filter((t) => t === "Binário").length;
-
-      return {
-        nome:
-          nomes.length <= 2
-            ? nomes.join(" + ")
-            : `${nomes.length} ficheiros STL`,
-        formato: "STL",
+      const formatos = [...new Set(arquivos.map((a) => a.name.split(".").pop().toUpperCase()))];
+      const meta = {
+        nome: nomeGrupoImportacao(nomes),
+        formato: formatos.join(" + "),
         tamanho: formatarTamanho(totalBytes),
         tamanhoBytes: totalBytes,
-        mime: "model/stl",
+        mime: "multipart/model",
         modificado: formatarData(Math.max(...arquivos.map((f) => f.lastModified))),
         ficheiros: nomes,
         pecas: nomes.length,
-        tipoStl:
+      };
+
+      if (arquivos.every((a) => a.name.toLowerCase().endsWith(".stl"))) {
+        const tipos = await Promise.all(arquivos.map((a) => detectarTipoStl(a)));
+        const ascii = tipos.filter((t) => t === "ASCII").length;
+        const binario = tipos.filter((t) => t === "Binário").length;
+        meta.formato = "STL";
+        meta.tipoStl =
           ascii && binario
             ? `${ascii} ASCII, ${binario} binário`
             : ascii
               ? "ASCII"
-              : "Binário",
-      };
+              : "Binário";
+      }
+
+      return meta;
+    }
+
+    async function lerMetadadosVariosStl(arquivos) {
+      return lerMetadadosVariosArquivos(arquivos);
     }
 
     async function carregarStlComoPeca(arquivo) {
@@ -924,95 +953,66 @@ import * as THREE from "three";
       });
     }
 
-    function corEhPadraoRenderizador(hex) {
-      return hex === "#FFFFFF" || hex === "#89B4FA";
+    function escapeHtmlTexto(t) {
+      return String(t)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
-    function normalizarHexCor(hex) {
-      if (!hex || typeof hex !== "string") return null;
-      const limpo = hex.trim();
-      if (!limpo) return null;
-      const comHash = limpo.startsWith("#") ? limpo : `#${limpo}`;
-      const upper = comHash.toUpperCase();
-      return /^#[0-9A-F]{6}$/.test(upper) ? upper : null;
+    function nomeCurtoFicheiro(nome) {
+      const base = nome.replace(/\.[^.]+$/, "");
+      return base.length > 22 ? `${base.slice(0, 20)}…` : base;
     }
 
-    function extrairCoresDoModelo(object, metaBambu = null) {
-      const visto = new Set();
-      const cores = [];
-      let temCorVertice = false;
-
-      function adicionarCor(hex) {
-        const normalizado = normalizarHexCor(hex);
-        if (!normalizado || visto.has(normalizado)) return;
-        visto.add(normalizado);
-        cores.push(normalizado);
-      }
-
-      const filamentos = analisarFilamentosBambu(object, metaBambu);
-      if (filamentos.length) {
-        for (const f of filamentos.sort((a, b) => a.slot - b.slot)) {
-          adicionarCor(f.hex);
+    function coletarCoresPecas() {
+      const entradas = [];
+      for (const grupo of painelItems?.getGrupos() ?? []) {
+        for (const peca of grupo.pecas) {
+          entradas.push({
+            id: peca.id,
+            nome: peca.nome,
+            cores: extrairCoresDoObject(peca.object3d, metaBambuDoObject(peca.object3d)),
+          });
         }
-        if (cores.length) return cores;
       }
+      return entradas;
+    }
 
-      object.traverse((child) => {
-        if (!child.isMesh || child.userData?.isSupport) return;
-
-        const meshTemCorVertice = Boolean(child.geometry?.attributes?.color);
-        if (meshTemCorVertice) temCorVertice = true;
-
-        const materiais = child.material
-          ? Array.isArray(child.material)
-            ? child.material
-            : [child.material]
-          : [];
-
-        if (!meshTemCorVertice) {
-          for (const mat of materiais) {
-            if (!mat?.color) continue;
-            adicionarCor(`#${mat.color.getHexString()}`);
-          }
-        }
-
-        if (meshTemCorVertice) {
-          const attr = child.geometry.attributes.color;
-          const passo = Math.max(1, Math.floor(attr.count / 3000));
-          for (let i = 0; i < attr.count && cores.length < 24; i += passo) {
-            const r = Math.round(attr.getX(i) * 255);
-            const g = Math.round(attr.getY(i) * 255);
-            const b = Math.round(attr.getZ(i) * 255);
-            adicionarCor(
-              `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-            );
-          }
+    function ligarCliqueCorSwatch(sw) {
+      sw.addEventListener("click", async () => {
+        const hex = sw.dataset.hex;
+        ferramentas?.aplicarFiltroCor(hex);
+        try {
+          await navigator.clipboard.writeText(hex);
+          sw.classList.add("copiado");
+          setStatus(`Cor ${hex} copiada`);
+          setTimeout(() => sw.classList.remove("copiado"), 800);
+        } catch {
+          setStatus(`Cor selecionada: ${hex}`);
         }
       });
-
-      if (temCorVertice) return cores;
-
-      const coresReais = cores.filter((hex) => !corEhPadraoRenderizador(hex));
-      if (coresReais.length) return coresReais;
-      if (cores.length > 1) return cores;
-      if (cores.length === 1) return cores;
-      return [];
     }
 
-    function atualizarCoresModeloAtual() {
-      if (!currentModel) return;
-      atualizarCoresModelo(extrairCoresDoModelo(currentModel, ultimoExtras?.bambu));
-    }
-
-    function atualizarCoresModelo(cores) {
+    function renderizarPainelCores(entradas) {
       const wrap = document.getElementById("cores-modelo-wrap");
       const row = document.getElementById("cores-modelo");
       const contagem = document.getElementById("cores-modelo-contagem");
       const vazio = document.getElementById("cores-modelo-vazio");
 
+      if (!entradas.length) {
+        wrap.classList.add("hidden");
+        row.innerHTML = "";
+        contagem.textContent = "";
+        vazio.classList.add("hidden");
+        return;
+      }
+
       wrap.classList.remove("hidden");
 
-      if (!cores.length) {
+      const comCor = entradas.filter((e) => e.cores.length);
+      if (!comCor.length) {
         row.innerHTML = "";
         contagem.textContent = "";
         vazio.classList.remove("hidden");
@@ -1020,32 +1020,40 @@ import * as THREE from "three";
       }
 
       vazio.classList.add("hidden");
-      row.innerHTML = cores
+      row.innerHTML = comCor
         .map(
-          (hex) =>
-            `<span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="${hex} — clique para filtrar/copiar"></span>`
+          (entrada) => `
+        <div class="cores-modelo-item">
+          <span class="cores-modelo-item-nome" title="${escapeHtmlTexto(entrada.nome)}">${escapeHtmlTexto(nomeCurtoFicheiro(entrada.nome))}</span>
+          <div class="cores-modelo-item-swatches">
+            ${entrada.cores
+              .map(
+                (hex) =>
+                  `<span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="${escapeHtmlTexto(entrada.nome)} — ${hex}"></span>`
+              )
+              .join("")}
+          </div>
+        </div>`
         )
         .join("");
 
-      row.querySelectorAll(".cor-modelo-swatch").forEach((sw) => {
-        sw.addEventListener("click", async () => {
-          const hex = sw.dataset.hex;
-          ferramentas?.aplicarFiltroCor(hex);
-          try {
-            await navigator.clipboard.writeText(hex);
-            sw.classList.add("copiado");
-            setStatus(`Cor ${hex} copiada`);
-            setTimeout(() => sw.classList.remove("copiado"), 800);
-          } catch {
-            setStatus(`Cor selecionada: ${hex}`);
-          }
-        });
-      });
+      row.querySelectorAll(".cor-modelo-swatch").forEach(ligarCliqueCorSwatch);
 
+      const totalCores = comCor.reduce((n, e) => n + e.cores.length, 0);
       contagem.textContent =
-        cores.length === 1
-          ? "1 cor · clique para filtrar"
-          : `${cores.length} cores · clique para filtrar`;
+        comCor.length === 1
+          ? `${totalCores} cor · clique para filtrar`
+          : `${comCor.length} ficheiros · ${totalCores} cores · clique para filtrar`;
+    }
+
+    function atualizarCoresUi() {
+      if (!painelItems?.temItems()) {
+        limparCoresModelo();
+        return;
+      }
+      const entradas = coletarCoresPecas();
+      painelItems.atualizarCoresPecas(entradas);
+      renderizarPainelCores(entradas);
     }
 
     function limparCoresModelo() {
@@ -1055,32 +1063,57 @@ import * as THREE from "three";
       document.getElementById("cores-modelo-vazio").classList.add("hidden");
     }
 
-    function showModel(object, arquivoMeta, extras = {}) {
-      clearModel();
+    function apresentarImportacao({ importGroups, arquivoMeta, extras = {}, append = false }) {
+      if (!append) {
+        if (currentModel) {
+          modelPivot.remove(currentModel);
+          currentModel.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+              else child.material.dispose();
+            }
+          });
+          currentModel = null;
+          materiaisOriginais.clear();
+          meshComCorVertice.clear();
+          limparCoresModelo();
+          secaoFilamentosCache = null;
+          secaoExtensoesCache = null;
+        }
+        painelItems?.resetEstado();
+      }
+
+      ensureItemsRoot();
+
+      for (const grupo of importGroups) {
+        currentModel.add(grupo.object3d);
+        painelItems?.adicionarGrupo({
+          nome: grupo.nome,
+          object3d: grupo.object3d,
+          pecas: grupo.pecas,
+        });
+      }
 
       ultimoArquivoMeta = arquivoMeta;
-      ultimoExtras = extras;
-      ultimoFormato = arquivoMeta.formato || "STL";
+      ultimoExtras = append ? { ...ultimoExtras, ...extras } : extras;
+      ultimoFormato = (arquivoMeta.formato || "STL").split(" + ")[0];
 
-      const geo = analisarGeometria(object);
-      const coresModelo = extrairCoresDoModelo(object, extras.bambu);
-      salvarEstadoVisual(object);
-      aplicarVisual(object);
-      currentModel = object;
-      modelPivot.add(object);
-      centerAndFrame(object, {
-        naMesa: Boolean(extras.bambu) || ultimoFormato === "3MF",
-      });
+      const geo = analisarGeometria(currentModel);
+      salvarEstadoVisual(currentModel);
+      aplicarVisual(currentModel);
 
-      const caixa = new THREE.Box3().setFromObject(object);
+      centerAndFrame(currentModel);
+
+      const caixa = new THREE.Box3().setFromObject(currentModel);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
       geo.centro = caixa.getCenter(new THREE.Vector3());
       geo.diagonal = geo.tamanho.length();
 
-      secaoFilamentosCache = ferramentas?.onModelLoaded(object, extras, geo, ultimoFormato);
-      secaoExtensoesCache = extensoes?.onModelLoaded(object, {
-        ...extras,
-        bambuImpressao: extras.bambu?.bambuImpressao,
+      secaoFilamentosCache = ferramentas?.onModelLoaded(currentModel, ultimoExtras, geo, ultimoFormato);
+      secaoExtensoesCache = extensoes?.onModelLoaded(currentModel, {
+        ...ultimoExtras,
+        bambuImpressao: ultimoExtras?.bambu?.bambuImpressao,
         formato: ultimoFormato,
       });
 
@@ -1088,11 +1121,33 @@ import * as THREE from "three";
 
       placeholder.classList.add("hidden");
       renderizarPainel(secoes);
-      atualizarCoresModelo(coresModelo);
+      atualizarCoresUi();
       ferramentas?.sincronizarCameras();
       publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile);
       setPainelPosModelo(true);
       setStatus(`Modelo carregado: ${arquivoMeta.nome}`);
+    }
+
+    function showModel(object, arquivoMeta, extras = {}, { append = false } = {}) {
+      const nomeFicheiro = ultimoArquivoFile?.name || arquivoMeta.nome || "Modelo";
+      const importGroup = new THREE.Group();
+      importGroup.name = nomeGrupoImportacao([nomeFicheiro]);
+      object.name = nomeBaseArquivo({ name: nomeFicheiro });
+      importGroup.add(object);
+      if (extras.bambu) object.userData.bambuExtras = extras.bambu;
+
+      apresentarImportacao({
+        importGroups: [
+          {
+            nome: importGroup.name,
+            object3d: importGroup,
+            pecas: [{ nome: nomeFicheiro, object3d: object }],
+          },
+        ],
+        arquivoMeta,
+        extras,
+        append,
+      });
     }
 
     async function carregarObjetoBruto(file, arquivosRelacionados = []) {
@@ -1141,22 +1196,81 @@ import * as THREE from "three";
       }
     }
 
-    async function loadVariosStl(arquivos) {
-      ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros STL…`);
-      setStatus(`Carregando ${arquivos.length} ficheiros STL…`);
+    const EXTENSOES_LOTE = new Set(["stl", "obj", "ply", "off", "glb", "gltf", "3mf", "mf3"]);
+
+    function extensaoArquivo(nome) {
+      return nome.split(".").pop().toLowerCase();
+    }
+
+    function isLoteSuportado(arquivos) {
+      if (arquivos.length < 2) return false;
+      return arquivos.every((f) => EXTENSOES_LOTE.has(extensaoArquivo(f.name)));
+    }
+
+    async function carregarFicheiroComoPeca(arquivo, arquivosRelacionados) {
+      const ext = extensaoArquivo(arquivo.name);
+      const { object, extras } = await carregarObjetoBruto(arquivo, arquivosRelacionados);
+      const wrapped = criarContainerModelo(object, ext);
+      wrapped.name = nomeBaseArquivo(arquivo);
+      if (extras.bambu) wrapped.userData.bambuExtras = extras.bambu;
+      return { wrapped, extras, ext, arquivo };
+    }
+
+    async function loadVariosArquivos(arquivos, { append = false } = {}) {
+      ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros…`);
+      setStatus(`Carregando ${arquivos.length} ficheiros…`);
 
       try {
-        const arquivoMeta = await lerMetadadosVariosStl(arquivos);
-        ultimoArquivoFile = arquivos[0];
-        ultimoArquivosImportados = arquivos;
         revogarUrlsFbx(fbxUrlsAtivas);
 
-        const object = await carregarVariosStl(arquivos);
-        for (const arquivo of arquivos) {
-          ferramentas?.salvarRecente(arquivo);
+        const carregados = await Promise.all(
+          arquivos.map((arquivo) => carregarFicheiroComoPeca(arquivo, arquivos))
+        );
+
+        const mergedExtras = { multiArquivos: true };
+        for (const item of carregados) {
+          if (item.extras.bambu) mergedExtras.bambu = item.extras.bambu;
+          if (item.extras.gltf) mergedExtras.gltf = item.extras.gltf;
+          if (item.extras.fbxUrls) {
+            fbxUrlsAtivas = item.extras.fbxUrls;
+            mergedExtras.fbxUrls = item.extras.fbxUrls;
+          }
         }
 
-        showModel(criarContainerModelo(object, "stl"), arquivoMeta, { multiStl: true });
+        const importGroup = new THREE.Group();
+        importGroup.name = nomeGrupoImportacao(arquivos.map((a) => a.name));
+
+        const pecas = carregados.map((item) => {
+          importGroup.add(item.wrapped);
+          return { nome: item.arquivo.name, object3d: item.wrapped };
+        });
+
+        if (append) {
+          ultimoArquivosImportados = [...(ultimoArquivosImportados || []), ...arquivos];
+          if (ultimoArquivoMeta) {
+            ultimoArquivoMeta = {
+              ...ultimoArquivoMeta,
+              ficheiros: [...(ultimoArquivoMeta.ficheiros || []), ...arquivos.map((a) => a.name)],
+              pecas: (ultimoArquivoMeta.pecas || 0) + arquivos.length,
+            };
+          }
+        } else {
+          ultimoArquivoFile = arquivos[0];
+          ultimoArquivosImportados = arquivos;
+        }
+
+        const arquivoMeta = append && ultimoArquivoMeta
+          ? ultimoArquivoMeta
+          : await lerMetadadosVariosArquivos(arquivos);
+
+        apresentarImportacao({
+          importGroups: [{ nome: importGroup.name, object3d: importGroup, pecas }],
+          arquivoMeta,
+          extras: mergedExtras,
+          append,
+        });
+
+        setStatus(`Carregados ${arquivos.length} ficheiros em «${importGroup.name}»`);
       } catch (err) {
         setStatus(`Erro: ${err.message}`, true);
       } finally {
@@ -1164,22 +1278,29 @@ import * as THREE from "three";
       }
     }
 
-    async function loadFile(file, arquivosRelacionados = []) {
+    async function loadVariosStl(arquivos) {
+      return loadVariosArquivos(arquivos);
+    }
+
+    async function loadFile(file, arquivosRelacionados = [], { append = false } = {}) {
       const ext = file.name.split(".").pop().toLowerCase();
       ferramentas?.setLoading(true, `Carregando ${file.name}...`);
       setStatus(`Carregando ${file.name}...`);
 
       try {
         const arquivoMeta = await lerMetadadosArquivo(file, ext);
-        ultimoArquivoFile = file;
-        ultimoArquivosImportados = [file];
+        if (!append) {
+          ultimoArquivoFile = file;
+          ultimoArquivosImportados = [file];
+        } else {
+          ultimoArquivosImportados = [...(ultimoArquivosImportados || []), file];
+        }
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
         if (extras.fbxUrls) fbxUrlsAtivas = extras.fbxUrls;
 
-        ferramentas?.salvarRecente(file);
-        showModel(criarContainerModelo(object, ext), arquivoMeta, extras);
+        showModel(criarContainerModelo(object, ext), arquivoMeta, extras, { append });
       } catch (err) {
         setStatus(`Erro: ${err.message}`, true);
       } finally {
@@ -1197,35 +1318,42 @@ import * as THREE from "three";
       });
     }
     initPainelExpanders();
+    montarControlesViewport(document.querySelector(".viewer"));
 
-    document.getElementById("file-input").addEventListener("change", (e) => {
-      const arquivos = Array.from(e.target.files || []);
-      if (!arquivos.length) return;
-
+    function processarFicheirosSelecionados(arquivos, { append = false } = {}) {
       const fbx = arquivos.find((f) => f.name.toLowerCase().endsWith(".fbx"));
       if (fbx) {
-        loadFile(fbx, arquivos);
-        e.target.value = "";
+        loadFile(fbx, arquivos, { append });
         return;
       }
 
       const zip = arquivos.find((f) => f.name.toLowerCase().endsWith(".zip"));
       if (zip) {
-        loadFile(zip, arquivos);
-        e.target.value = "";
+        loadFile(zip, arquivos, { append });
         return;
       }
 
-      const stls = arquivos.filter((f) => f.name.toLowerCase().endsWith(".stl"));
-      if (stls.length >= 2) {
-        loadVariosStl(stls);
-        e.target.value = "";
+      if (isLoteSuportado(arquivos)) {
+        loadVariosArquivos(arquivos, { append });
         return;
       }
 
-      loadFile(arquivos[0], arquivos);
-      e.target.value = "";
+      loadFile(arquivos[0], arquivos, { append });
+    }
+
+    painelItems = initPainelItems({
+      setStatus,
+      onFicheirosSelecionados: processarFicheirosSelecionados,
+      onItemsAlterados: () => sincronizarAposItemsAlterados(),
+      onVisibilidadeAlterada: () => {
+        if (currentModel) aplicarVisual(currentModel);
+      },
+      onCorClicada: (hex) => {
+        ferramentas?.aplicarFiltroCor(hex);
+        setStatus(`Cor selecionada: ${hex}`);
+      },
     });
+    painelItems.bindUi();
 
     function atualizarSecaoFilamentos() {
       if (!currentModel || !ultimoArquivoMeta || !ferramentas) return;
@@ -1236,21 +1364,21 @@ import * as THREE from "three";
       renderizarPainel(montarSecoesUltimo(geo));
     }
 
-    document.getElementById("chk-cores").addEventListener("change", (e) => {
+    document.getElementById("chk-cores")?.addEventListener("change", (e) => {
       usarCores = e.target.checked;
       if (currentModel) aplicarVisual(currentModel);
       ferramentas?.salvarPreferencias({ cores: e.target.checked });
       setStatus(usarCores ? "Cores originais ativadas" : "Cores originais desativadas");
     });
 
-    document.getElementById("chk-wireframe").addEventListener("change", (e) => {
+    document.getElementById("chk-wireframe")?.addEventListener("change", (e) => {
       wireframe = e.target.checked;
       if (currentModel) aplicarVisual(currentModel);
       ferramentas?.salvarPreferencias({ wireframe: e.target.checked });
       setStatus(wireframe ? "Wireframe ativado" : "Wireframe desativado");
     });
 
-    document.getElementById("fundos").addEventListener("click", (e) => {
+    document.getElementById("fundos")?.addEventListener("click", (e) => {
       const btn = e.target.closest(".fundo-btn");
       if (!btn) return;
       bgIndex = parseInt(btn.dataset.index, 10);
@@ -1335,13 +1463,12 @@ import * as THREE from "three";
       refreshModelVisual: (model) => {
         salvarEstadoVisual(model);
         aplicarVisual(model);
-        atualizarCoresModeloAtual();
+        atualizarCoresUi();
       },
-      atualizarCoresModelo: atualizarCoresModeloAtual,
+      atualizarCoresModelo: () => atualizarCoresUi(),
     });
 
     ferramentas.setLights(hemiLight, dirLight);
-    montarControlesViewport(document.querySelector(".viewer"));
     ferramentas.bindUi();
     extensoes.bindUi();
 

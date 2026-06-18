@@ -100,11 +100,13 @@ export function prefetchCardModels(products) {
 }
 
 function getCard3mfRotation(product, object, source = 'print') {
-  return resolveDisplayRotation(object, product.card3mfRotation, { source });
+  const explicit =
+    product.card3mfRotation ?? product.model3mfRotation ?? product.modelRotation;
+  return resolveDisplayRotation(object, explicit, { source });
 }
 
 function getCard3mfFacing(product) {
-  return product.card3mfFacing ?? 0;
+  return product.card3mfFacing ?? product.model3mfFacing ?? product.modelFacing ?? 0;
 }
 
 function fitContent(object, product, source = 'print') {
@@ -194,14 +196,14 @@ class CardPreview3D {
     this.product = product;
     this.visible = false;
     this.spinEnabled = false;
-    this.running = false;
+    this.spinLoopActive = false;
     this.disposed = false;
     this.modelPivot = null;
-    this.raf = 0;
+    this.spinRoot = null;
     this.scene = null;
     this.camera = null;
     this.renderer = null;
-    this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.spinClock = new THREE.Clock();
 
     this.load();
   }
@@ -246,7 +248,11 @@ class CardPreview3D {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
-    if (!this.spinEnabled) this.renderFrame();
+    if (this.spinEnabled && this.canAnimate()) {
+      if (!this.spinLoopActive) this.syncSpinAnimation({ force: true });
+    } else if (!this.spinEnabled) {
+      this.renderFrame();
+    }
   }
 
   renderFrame() {
@@ -270,10 +276,10 @@ class CardPreview3D {
     }
 
     if (this.spinEnabled) {
-      if (this.modelPivot) this.modelPivot.rotation.y = 0;
-      if (this.visible) this.startLoop();
+      if (this.spinRoot) this.spinRoot.rotation.y = 0;
+      if (this.visible) this.syncSpinAnimation();
     } else {
-      this.stopLoop();
+      this.stopSpinAnimation();
       this.renderFrame();
     }
   }
@@ -281,46 +287,64 @@ class CardPreview3D {
   setVisible(visible) {
     this.visible = visible;
     if (!visible) {
-      this.stopLoop();
+      this.stopSpinAnimation();
       return;
     }
     this.renderFrame();
-    if (this.spinEnabled) this.startLoop();
+    if (this.spinEnabled) this.syncSpinAnimation();
   }
 
-  shouldSpin() {
+  canAnimate() {
     return Boolean(this.visible && this.spinEnabled && this.modelPivot && this.renderer);
   }
 
-  startLoop() {
-    if (this.running || this.disposed || !this.shouldSpin()) return;
-    this.running = true;
-    const tick = () => {
-      if (!this.running || this.disposed) return;
-      this.raf = requestAnimationFrame(tick);
-      if (!this.shouldSpin()) return;
-      this.renderer.render(this.scene, this.camera);
-      if (!this.reduceMotion) {
-        this.modelPivot.rotation.y += CARD_SPIN_SPEED * 0.016;
+  syncSpinAnimation({ force = false } = {}) {
+    if (this.disposed || !this.renderer) return;
+
+    if (!this.canAnimate()) {
+      this.stopSpinAnimation();
+      return;
+    }
+
+    if (this.spinLoopActive && !force) return;
+
+    this.stopSpinAnimation();
+    this.spinLoopActive = true;
+    this.spinClock.start();
+
+    this.renderer.setAnimationLoop(() => {
+      if (this.disposed || !this.canAnimate()) {
+        this.stopSpinAnimation();
+        this.renderFrame();
+        return;
       }
-    };
-    tick();
+
+      const dt = Math.min(this.spinClock.getDelta(), 0.05);
+      this.modelPivot.rotation.y += CARD_SPIN_SPEED * dt;
+      this.renderer.render(this.scene, this.camera);
+    });
   }
 
-  stopLoop() {
-    this.running = false;
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
+  stopSpinAnimation() {
+    this.spinLoopActive = false;
+    this.renderer?.setAnimationLoop(null);
   }
 
   showModel(pivot) {
     if (this.disposed) return;
     this.ensureRenderer();
-    pivot.rotation.set(0, 0, 0);
-    this.modelPivot = pivot;
-    this.scene.add(pivot);
 
-    const box = new THREE.Box3().setFromObject(pivot);
+    if (this.spinRoot) {
+      this.scene.remove(this.spinRoot);
+      this.spinRoot = null;
+    }
+
+    this.spinRoot = new THREE.Group();
+    this.spinRoot.add(pivot);
+    this.modelPivot = this.spinRoot;
+    this.scene.add(this.spinRoot);
+
+    const box = new THREE.Box3().setFromObject(this.spinRoot);
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z, 0.001);
     const center = box.getCenter(new THREE.Vector3());
@@ -334,9 +358,7 @@ class CardPreview3D {
     this.host.classList.add('is-loaded');
     this.renderFrame();
     if (this.spinEnabled && this.visible) {
-      requestAnimationFrame(() => {
-        if (!this.disposed && this.spinEnabled && this.visible) this.startLoop();
-      });
+      this.syncSpinAnimation({ force: true });
     }
   }
 
@@ -394,19 +416,22 @@ class CardPreview3D {
 
   dispose() {
     this.disposed = true;
-    this.stopLoop();
+    this.stopSpinAnimation();
     this.resizeObserver?.disconnect();
 
-    if (this.modelPivot && this.scene) {
-      this.modelPivot.traverse((child) => {
+    if (this.spinRoot && this.scene) {
+      this.spinRoot.traverse((child) => {
         if (!child.isMesh) return;
         child.geometry?.dispose();
         const mats = child.material;
         if (Array.isArray(mats)) mats.forEach((m) => m?.dispose());
         else mats?.dispose();
       });
-      this.scene.remove(this.modelPivot);
+      this.scene.remove(this.spinRoot);
     }
+
+    this.spinRoot = null;
+    this.modelPivot = null;
 
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
@@ -484,10 +509,11 @@ function bindCardSpinToggles(container, byId) {
     preview.classList.add('is-3d-active');
     const instance = ensureCardPreview(host, product);
     instance.setSpinEnabled(true);
+    instance.syncSpinAnimation({ force: true });
   };
 
-  container.addEventListener('click', onSpinClick);
-  return () => container.removeEventListener('click', onSpinClick);
+  container.addEventListener('click', onSpinClick, true);
+  return () => container.removeEventListener('click', onSpinClick, true);
 }
 
 export function bindCardPreview3d(container, products) {
