@@ -1,5 +1,5 @@
 ﻿/**
- * Extensões do visualizador: formatos, export, AR, etc.
+ * Extensões do visualizador: formatos, export, etc.
  */
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { extrairZip } from "./zip-loader.js";
@@ -7,8 +7,6 @@ import { carregarAmf } from "./amf-loader.js";
 import { carregarGcode, aplicarCamadaGcode, infoGcode } from "./gcode-loader.js";
 import { analisarMalha, secaoAnaliseMalha } from "./analise-malha.js";
 import { capturarPngTransparente, exportarGifGiro } from "./export-media.js";
-import { copiarLinkCompartilhamento, lerSessaoDaUrl } from "./sessao-share.js";
-import { suportaAr, iniciarAr } from "./ar-xr.js";
 import { secaoMetadadosBambu } from "./bambu-metadados.js";
 
 let dracoLoader = null;
@@ -124,7 +122,6 @@ export function initExtensoes(app) {
         <h3>Atalhos</h3>
         <ul>
           <li><kbd>R</kbd> Resetar câmera</li>
-          <li><kbd>W</kbd> Wireframe</li>
           <li><kbd>F</kbd> Tela cheia</li>
           <li><kbd>S</kbd> Captura de tela</li>
           <li><kbd>?</kbd> Esta ajuda</li>
@@ -146,19 +143,8 @@ export function initExtensoes(app) {
     localStorage.setItem("visualizador3d-tema", tema);
   }
 
-  function restaurarSessao() {
-    const sessao = lerSessaoDaUrl();
-    if (!sessao) return;
-    const ferr = app.getFerramentas?.();
-    if (sessao.prefs) ferr?.salvarPreferencias(sessao.prefs);
-    ferr?.aplicarPreferencias?.();
-    if (sessao.bgIndex != null) app.aplicarPreferenciaFundo?.(sessao.bgIndex);
-    app.setStatus("Sessão restaurada da URL");
-  }
-
   function bindUi() {
     aplicarTema(localStorage.getItem("visualizador3d-tema") || "escuro");
-    restaurarSessao();
 
     document.getElementById("btn-png-alpha")?.addEventListener("click", () => {
       const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
@@ -175,6 +161,7 @@ export function initExtensoes(app) {
           scene: app.scene,
           camera: cam,
           modelPivot: app.modelPivot,
+          orbit: app.getOrbitControl?.(),
           onProgress: (a, b) => app.setStatus(`Vídeo: quadro ${a}/${b}`),
         });
         app.setStatus("Vídeo WebM salvo");
@@ -183,33 +170,9 @@ export function initExtensoes(app) {
       }
     });
 
-    document.getElementById("btn-compartilhar")?.addEventListener("click", async () => {
-      try {
-        const prefs = app.getFerramentas?.()?.lerPreferencias?.() || {};
-        const url = await copiarLinkCompartilhamento({ prefs, bgIndex: prefs.bgIndex });
-        app.setStatus("Link copiado para a área de transferência");
-      } catch {
-        app.setStatus("Não foi possível copiar o link", true);
-      }
-    });
-
     document.getElementById("slider-gcode-camada")?.addEventListener("input", (e) => {
       if (!estado.gcodeGrupo) return;
       aplicarCamadaGcode(estado.gcodeGrupo, parseInt(e.target.value, 10));
-    });
-
-    suportaAr().then((ok) => {
-      const btn = document.getElementById("btn-ar");
-      if (!btn) return;
-      btn.classList.toggle("hidden", !ok);
-      btn.addEventListener("click", () => {
-        iniciarAr({
-          renderer: app.renderer,
-          scene: app.scene,
-          modelPivot: app.modelPivot,
-          onStatus: app.setStatus,
-        }).catch((err) => app.setStatus(err.message, true));
-      });
     });
 
     document.addEventListener("keydown", (e) => {

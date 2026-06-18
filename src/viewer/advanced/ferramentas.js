@@ -11,53 +11,48 @@ import {
 const CHAVE_PREFS = "visualizador3d-prefs";
 const PREFS_PADRAO = {
   cores: true,
-  wireframe: false,
   giroAuto: false,
-  sombra: false,
   bbox: false,
-  referencia: false,
   ortografico: false,
-  overhangs: false,
   regua: false,
-  planoCorte: false,
   suportes: false,
+  grade: false,
+  eixos: false,
+  medidas: false,
   luz: 1.1,
   bgIndex: 0,
 };
 
 const VELOCIDADE_INERCIA = 0.94;
 const INERCIA_MIN = 0.00015;
-const GIRO_AUTO_VEL = 0.004;
+const GIRO_AUTO_VEL = 0.006;
 
 export function initFerramentas(app) {
   const estado = {
     inercia: 0,
     arrastando: false,
     giroAuto: false,
-    sombra: false,
     bbox: false,
-    referencia: false,
     ortografico: false,
-    overhangs: false,
     regua: false,
-    planoCorte: false,
-    clipAltura: 0,
-    anguloOverhang: 45,
     mixer: null,
     acaoAnimacao: null,
     animando: false,
     reguaPontos: [],
     filamentos: [],
     filtroCor: null,
-    meshOverhangBackup: new Map(),
     carregando: false,
     mostrarSuportes: false,
     temSuportes: false,
+    grade: false,
+    eixos: false,
+    medidas: false,
   };
 
   let bboxHelper = null;
-  let chao = null;
-  let cuboRef = null;
+  let gradeHelper = null;
+  let axesHelper = null;
+  let medidasOverlay = null;
   let reguaLinha = null;
   let reguaMarcadores = null;
   let reguaLabel = null;
@@ -115,24 +110,6 @@ export function initFerramentas(app) {
     orthoCamera.updateProjectionMatrix();
   }
 
-  function configurarSombras(ativo) {
-    app.renderer.shadowMap.enabled = ativo;
-    if (!chao) {
-      const geo = new THREE.PlaneGeometry(200, 200);
-      const mat = new THREE.ShadowMaterial({ opacity: 0.25 });
-      chao = new THREE.Mesh(geo, mat);
-      chao.rotation.x = -Math.PI / 2;
-      chao.receiveShadow = true;
-      chao.visible = false;
-      app.scene.add(chao);
-    }
-    chao.visible = ativo;
-    if (dirLight) dirLight.castShadow = ativo;
-    app.getCurrentModel()?.traverse((c) => {
-      if (c.isMesh) c.castShadow = ativo;
-    });
-  }
-
   function atualizarBbox() {
     if (bboxHelper) {
       app.scene.remove(bboxHelper);
@@ -144,127 +121,127 @@ export function initFerramentas(app) {
     app.scene.add(bboxHelper);
   }
 
-  function atualizarReferencia() {
-    if (cuboRef) {
-      app.scene.remove(cuboRef);
-      cuboRef.geometry.dispose();
-      cuboRef.material.dispose();
-      cuboRef = null;
-    }
-    if (!estado.referencia || !app.getCurrentModel()) return;
-    const escala = app.unidadeParaCena(0.01);
-    const geo = new THREE.BoxGeometry(escala, escala, escala);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xf9e2af,
-      transparent: true,
-      opacity: 0.85,
-    });
-    cuboRef = new THREE.Mesh(geo, mat);
+  function removerGrade() {
+    if (!gradeHelper) return;
+    app.scene.remove(gradeHelper);
+    gradeHelper.geometry.dispose();
+    const mats = gradeHelper.material;
+    if (Array.isArray(mats)) mats.forEach((m) => m.dispose());
+    else mats?.dispose();
+    gradeHelper = null;
+  }
+
+  function atualizarGrade() {
+    removerGrade();
+    if (!estado.grade || !app.getCurrentModel()) return;
+
     const box = new THREE.Box3().setFromObject(app.modelPivot);
-    cuboRef.position.set(box.min.x, box.min.y + escala / 2, box.min.z);
-    app.scene.add(cuboRef);
+    const size = box.getSize(new THREE.Vector3());
+    const cell = app.unidadeParaCena(0.01);
+    const span = Math.max(size.x, size.z, cell * 4) * 1.4;
+    const divisions = Math.min(40, Math.max(8, Math.ceil(span / cell)));
+    const gridSize = divisions * cell;
+
+    gradeHelper = new THREE.GridHelper(gridSize, divisions, 0x585b70, 0x313244);
+    gradeHelper.position.set(
+      (box.min.x + box.max.x) * 0.5,
+      box.min.y,
+      (box.min.z + box.max.z) * 0.5
+    );
+    app.scene.add(gradeHelper);
   }
 
-  function aplicarPlanoCorte() {
-    const ativo = estado.planoCorte;
-    const plane = ativo
-      ? new THREE.Plane(new THREE.Vector3(0, -1, 0), -estado.clipAltura)
-      : null;
-    app.renderer.localClippingEnabled = ativo;
-    app.getCurrentModel()?.traverse((c) => {
-      if (!c.isMesh || !c.material) return;
-      const mats = Array.isArray(c.material) ? c.material : [c.material];
-      mats.forEach((m) => {
-        m.clippingPlanes = plane ? [plane] : [];
-        m.clipShadows = true;
-        m.needsUpdate = true;
-      });
-    });
+  function removerEixos() {
+    if (!axesHelper) return;
+    app.scene.remove(axesHelper);
+    axesHelper.dispose();
+    axesHelper = null;
   }
 
-  function restaurarOverhangs() {
-    estado.meshOverhangBackup.forEach((backup, uuid) => {
-      const mesh = app.getCurrentModel()?.getObjectByProperty("uuid", uuid);
-      if (!mesh) return;
-      if (mesh.geometry !== backup.geo) mesh.geometry.dispose();
-      mesh.geometry = backup.geo;
-      mesh.material = backup.mat;
-    });
-    estado.meshOverhangBackup.clear();
+  function atualizarEixos() {
+    removerEixos();
+    if (!estado.eixos || !app.getCurrentModel()) return;
+
+    const box = new THREE.Box3().setFromObject(app.modelPivot);
+    const size = box.getSize(new THREE.Vector3());
+    const len = Math.max(size.x, size.y, size.z) * 0.55;
+    axesHelper = new THREE.AxesHelper(len);
+    axesHelper.position.copy(box.getCenter(new THREE.Vector3()));
+    app.scene.add(axesHelper);
   }
 
-  function aplicarOverhangs() {
-    restaurarOverhangs();
-    if (!estado.overhangs || !app.getCurrentModel()) return;
+  function resumoMedidasModelo() {
+    const model = app.getCurrentModel();
+    if (!model || !app.analisarGeometria || !app.converterMedidas || !app.getFormato) {
+      return null;
+    }
+    const geo = app.analisarGeometria(model);
+    const conv = app.converterMedidas(geo, app.getFormato());
+    const mm = (v) => Math.round(v * 1000);
+    const dim = `${mm(conv.tamanhoM.x)} × ${mm(conv.tamanhoM.y)} × ${mm(conv.tamanhoM.z)} mm`;
+    const vol = app.formatarVolume?.(conv.volumeM3, conv.unidade) ?? "";
+    const tris = geo.triangulos.toLocaleString("pt-BR");
+    return { dim, vol, tris };
+  }
 
-    const limite = Math.cos((estado.anguloOverhang * Math.PI) / 180);
-    const up = new THREE.Vector3(0, 1, 0);
-    const normal = new THREE.Vector3();
-    const a = new THREE.Vector3();
-    const b = new THREE.Vector3();
-    const c = new THREE.Vector3();
-    const matNormal = new THREE.Matrix3();
+  function atualizarMedidasOverlay() {
+    if (!medidasOverlay) {
+      medidasOverlay = document.createElement("div");
+      medidasOverlay.className = "medidas-overlay hidden";
+      medidasOverlay.setAttribute("aria-live", "polite");
+      document.querySelector(".viewer")?.appendChild(medidasOverlay);
+    }
 
-    app.getCurrentModel().traverse((mesh) => {
-      if (!mesh.isMesh || !mesh.geometry) return;
-      estado.meshOverhangBackup.set(mesh.uuid, {
-        geo: mesh.geometry,
-        mat: mesh.material,
-      });
+    if (!estado.medidas || !app.getCurrentModel()) {
+      medidasOverlay.classList.add("hidden");
+      return;
+    }
 
-      const geo = mesh.geometry;
-      const pos = geo.attributes.position;
-      if (!pos) return;
+    const resumo = resumoMedidasModelo();
+    if (!resumo) {
+      medidasOverlay.classList.add("hidden");
+      return;
+    }
 
-      const cores = new Float32Array(pos.count * 3);
-      const corBase = mesh.material?.color
-        ? mesh.material.color.clone()
-        : new THREE.Color(0x89b4fa);
-      const corOver = new THREE.Color(0xf38ba8);
-      matNormal.getNormalMatrix(mesh.matrixWorld);
+    medidasOverlay.innerHTML = `
+      <strong>${resumo.dim}</strong>
+      <span>${resumo.vol}</span>
+      <span>${resumo.tris} triângulos</span>`;
+    medidasOverlay.classList.remove("hidden");
+  }
 
-      const processar = (i0, i1, i2) => {
-        a.fromBufferAttribute(pos, i0);
-        b.fromBufferAttribute(pos, i1);
-        c.fromBufferAttribute(pos, i2);
-        b.sub(a);
-        c.sub(a);
-        normal.crossVectors(b, c).normalize();
-        normal.applyMatrix3(matNormal).normalize();
-        const ehOverhang = normal.dot(up) < limite;
-        const cor = ehOverhang ? corOver : corBase;
-        for (const idx of [i0, i1, i2]) {
-          cores[idx * 3] = cor.r;
-          cores[idx * 3 + 1] = cor.g;
-          cores[idx * 3 + 2] = cor.b;
-        }
-      };
+  function atualizarAuxiliaresVisuais() {
+    atualizarGrade();
+    atualizarEixos();
+    atualizarMedidasOverlay();
+  }
 
-      if (geo.index) {
-        for (let i = 0; i < geo.index.count; i += 3) {
-          processar(
-            geo.index.getX(i),
-            geo.index.getX(i + 1),
-            geo.index.getX(i + 2)
-          );
-        }
-      } else {
-        for (let i = 0; i < pos.count; i += 3) {
-          processar(i, i + 1, i + 2);
-        }
-      }
+  async function copiarMedidasModelo() {
+    const resumo = resumoMedidasModelo();
+    if (!resumo) {
+      app.setStatus("Carregue um modelo primeiro", true);
+      return;
+    }
+    const texto = `${resumo.dim} · ${resumo.vol} · ${resumo.tris} triângulos`;
+    try {
+      await navigator.clipboard.writeText(texto);
+      app.setStatus("Dimensões copiadas");
+    } catch {
+      app.setStatus("Não foi possível copiar", true);
+    }
+  }
 
-      const novaGeo = geo.clone();
-      novaGeo.setAttribute("color", new THREE.BufferAttribute(cores, 3));
-      const mat = new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.6,
-        metalness: 0.1,
-        wireframe: app.getWireframe(),
-      });
-      mesh.geometry = novaGeo;
-      mesh.material = mat;
-    });
+  function resetarPan() {
+    app.setPanOffset(0, 0, 0);
+    app.setStatus("Pan resetado");
+  }
+
+  function limparAuxiliaresVisuais() {
+    removerGrade();
+    removerEixos();
+    if (medidasOverlay) {
+      medidasOverlay.classList.add("hidden");
+    }
   }
 
   function limparVisualRegua() {
@@ -460,56 +437,49 @@ export function initFerramentas(app) {
     };
 
     chk("chk-cores", prefs.cores);
-    chk("chk-wireframe", prefs.wireframe);
     chk("chk-giro-auto", prefs.giroAuto);
-    chk("chk-sombra", prefs.sombra);
     chk("chk-bbox", prefs.bbox);
-    chk("chk-referencia", prefs.referencia);
     chk("chk-ortografico", prefs.ortografico);
-    chk("chk-overhangs", prefs.overhangs);
     chk("chk-regua", prefs.regua);
-    chk("chk-plano-corte", prefs.planoCorte);
     chk("chk-suportes", prefs.suportes);
+    chk("chk-grade", prefs.grade);
+    chk("chk-eixos", prefs.eixos);
+    chk("chk-medidas", prefs.medidas);
 
     const sliderLuz = document.getElementById("slider-luz");
     if (sliderLuz) sliderLuz.value = prefs.luz;
 
     app.aplicarPreferenciaCores?.(prefs.cores);
-    app.aplicarPreferenciaWireframe?.(prefs.wireframe);
     app.aplicarPreferenciaFundo?.(prefs.bgIndex);
 
     dispararChange("chk-giro-auto");
-    dispararChange("chk-sombra");
     dispararChange("chk-bbox");
-    dispararChange("chk-referencia");
     dispararChange("chk-ortografico");
-    dispararChange("chk-overhangs");
     dispararChange("chk-regua");
-    dispararChange("chk-plano-corte");
+    dispararChange("chk-grade");
+    dispararChange("chk-eixos");
+    dispararChange("chk-medidas");
     dispararChange("slider-luz");
   }
 
     function definirVista(tipo) {
     app.resetarRotacao();
     app.setPanOffset(0, 0, 0);
-    const d = app.getCameraDistance();
-    const c = app.getCentroVisao();
-    const inclinacao = d * 0.18;
 
-    const destinos = {
-      frente: [0, inclinacao, d],
-      tras: [0, inclinacao, -d],
-      topo: [0, d, 0],
-      fundo: [0, -d, 0],
-      direita: [d, inclinacao, 0],
-      lateral: [d, inclinacao, 0],
-      esquerda: [-d, inclinacao, 0],
-      iso: [d * 0.65, d * 0.65 + inclinacao, d * 0.65],
+    const elev = Math.PI / 2 - 0.2;
+    const presets = {
+      frente: { theta: 0, phi: elev },
+      tras: { theta: Math.PI, phi: elev },
+      topo: { theta: 0, phi: 0.12 },
+      fundo: { theta: 0, phi: Math.PI - 0.12 },
+      direita: { theta: Math.PI / 2, phi: elev },
+      lateral: { theta: Math.PI / 2, phi: elev },
+      esquerda: { theta: -Math.PI / 2, phi: elev },
+      iso: { theta: Math.PI / 4, phi: Math.PI / 2 - 0.45 },
     };
 
-    const dest = destinos[tipo] || destinos.iso;
-    perspCamera.position.set(c.x + dest[0], c.y + dest[1], c.z + dest[2]);
-    perspCamera.lookAt(c.x, c.y, c.z);
+    const dest = presets[tipo] || presets.iso;
+    app.setOrbitAngles(dest.theta, dest.phi);
     sincronizarCameras();
 
     document.querySelectorAll(".btn-vista.is-ativa").forEach((b) => b.classList.remove("is-ativa"));
@@ -565,12 +535,7 @@ export function initFerramentas(app) {
 
   function tick(delta) {
     if (estado.giroAuto && app.getCurrentModel() && !estado.arrastando) {
-      const dq = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        GIRO_AUTO_VEL
-      );
-      app.getRotacaoQuat().premultiply(dq);
-      app.aplicarRotacao();
+      app.addOrbitTheta(GIRO_AUTO_VEL);
     }
 
     if (
@@ -578,12 +543,7 @@ export function initFerramentas(app) {
       Math.abs(estado.inercia) > INERCIA_MIN &&
       app.getCurrentModel()
     ) {
-      const dq = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        estado.inercia
-      );
-      app.getRotacaoQuat().premultiply(dq);
-      app.aplicarRotacao();
+      app.addOrbitTheta(estado.inercia);
       estado.inercia *= VELOCIDADE_INERCIA;
     }
 
@@ -636,28 +596,16 @@ export function initFerramentas(app) {
       iniciarAnimacaoClips(extras.animacoes.clips, extras.animacoes.alvo);
     }
 
-    const box = new THREE.Box3().setFromObject(app.modelPivot);
-    estado.clipAltura = box.max.y;
-    const slider = document.getElementById("slider-plano-corte");
-    if (slider) {
-      slider.min = box.min.y;
-      slider.max = box.max.y;
-      slider.value = estado.clipAltura;
-    }
-
-    configurarSombras(estado.sombra);
     atualizarBbox();
-    atualizarReferencia();
-    aplicarPlanoCorte();
-    if (estado.overhangs) aplicarOverhangs();
+    atualizarAuxiliaresVisuais();
 
     return montarSecaoFilamentos();
   }
 
   function onModelCleared() {
     pararAnimacao();
-    restaurarOverhangs();
     limparRegua();
+    limparAuxiliaresVisuais();
     estado.filamentos = [];
     estado.filtroCor = null;
     estado.temSuportes = false;
@@ -665,10 +613,6 @@ export function initFerramentas(app) {
     if (bboxHelper) {
       app.scene.remove(bboxHelper);
       bboxHelper = null;
-    }
-    if (cuboRef) {
-      app.scene.remove(cuboRef);
-      cuboRef = null;
     }
   }
 
@@ -679,25 +623,19 @@ export function initFerramentas(app) {
     document.getElementById("btn-fullscreen")?.addEventListener("click", () => {
       document.documentElement.requestFullscreen?.();
     });
+    document.getElementById("btn-copiar-medidas")?.addEventListener("click", () => {
+      copiarMedidasModelo();
+    });
+    document.getElementById("btn-reset-pan")?.addEventListener("click", resetarPan);
 
     document.getElementById("chk-giro-auto")?.addEventListener("change", (e) => {
       estado.giroAuto = e.target.checked;
       salvarPreferencias({ giroAuto: e.target.checked });
     });
-    document.getElementById("chk-sombra")?.addEventListener("change", (e) => {
-      estado.sombra = e.target.checked;
-      configurarSombras(estado.sombra);
-      salvarPreferencias({ sombra: e.target.checked });
-    });
     document.getElementById("chk-bbox")?.addEventListener("change", (e) => {
       estado.bbox = e.target.checked;
       atualizarBbox();
       salvarPreferencias({ bbox: e.target.checked });
-    });
-    document.getElementById("chk-referencia")?.addEventListener("change", (e) => {
-      estado.referencia = e.target.checked;
-      atualizarReferencia();
-      salvarPreferencias({ referencia: e.target.checked });
     });
     document.getElementById("chk-ortografico")?.addEventListener("change", (e) => {
       estado.ortografico = e.target.checked;
@@ -708,22 +646,26 @@ export function initFerramentas(app) {
       salvarPreferencias({ ortografico: e.target.checked });
       app.setStatus(estado.ortografico ? "Projeção ortográfica" : "Projeção perspectiva");
     });
-    document.getElementById("chk-overhangs")?.addEventListener("change", (e) => {
-      estado.overhangs = e.target.checked;
-      if (estado.overhangs) aplicarOverhangs();
-      else restaurarOverhangs();
-      salvarPreferencias({ overhangs: e.target.checked });
-    });
     document.getElementById("chk-regua")?.addEventListener("change", (e) => {
       estado.regua = e.target.checked;
       if (!estado.regua) limparRegua();
       salvarPreferencias({ regua: e.target.checked });
       app.setStatus(estado.regua ? "Régua: clique em dois pontos" : "Régua desativada");
     });
-    document.getElementById("chk-plano-corte")?.addEventListener("change", (e) => {
-      estado.planoCorte = e.target.checked;
-      aplicarPlanoCorte();
-      salvarPreferencias({ planoCorte: e.target.checked });
+    document.getElementById("chk-grade")?.addEventListener("change", (e) => {
+      estado.grade = e.target.checked;
+      atualizarGrade();
+      salvarPreferencias({ grade: e.target.checked });
+    });
+    document.getElementById("chk-eixos")?.addEventListener("change", (e) => {
+      estado.eixos = e.target.checked;
+      atualizarEixos();
+      salvarPreferencias({ eixos: e.target.checked });
+    });
+    document.getElementById("chk-medidas")?.addEventListener("change", (e) => {
+      estado.medidas = e.target.checked;
+      atualizarMedidasOverlay();
+      salvarPreferencias({ medidas: e.target.checked });
     });
     document.getElementById("chk-suportes")?.addEventListener("change", (e) => {
       estado.mostrarSuportes = e.target.checked;
@@ -739,16 +681,15 @@ export function initFerramentas(app) {
       if (dirLight) dirLight.intensity = v * 0.85;
       salvarPreferencias({ luz: v });
     });
-    document.getElementById("slider-plano-corte")?.addEventListener("input", (e) => {
-      estado.clipAltura = parseFloat(e.target.value);
-      aplicarPlanoCorte();
-    });
     document.querySelectorAll("[data-vista]").forEach((btn) => {
       btn.addEventListener("click", () => definirVista(btn.dataset.vista));
     });
 
     document.getElementById("btn-vista-centrar")?.addEventListener("click", () => {
-      if (app.getCurrentModel()) app.centerAndFrame(app.getCurrentModel());
+      if (app.getCurrentModel()) {
+        app.resetOrbitFrontal?.();
+        app.centerAndFrame(app.getCurrentModel());
+      }
     });
 
     btnAnim?.addEventListener("click", () => {
@@ -772,12 +713,6 @@ export function initFerramentas(app) {
       if (e.target.matches("input, select, textarea")) return;
       if (e.key === "r" || e.key === "R") {
         if (app.getCurrentModel()) app.centerAndFrame(app.getCurrentModel());
-      } else if (e.key === "w" || e.key === "W") {
-        const chk = document.getElementById("chk-wireframe");
-        if (chk) {
-          chk.checked = !chk.checked;
-          chk.dispatchEvent(new Event("change"));
-        }
       } else if (e.key === "f" || e.key === "F") {
         document.documentElement.requestFullscreen?.();
       } else if (e.key === "s" || e.key === "S") {
@@ -787,7 +722,7 @@ export function initFerramentas(app) {
 
     const params = new URLSearchParams(location.search);
     const modeloUrl = params.get("modelo");
-    if (modeloUrl && !params.get("sessao") && !params.get("produto")) {
+    if (modeloUrl && !params.get("produto")) {
       const fetchUrl = /^https?:\/\//i.test(modeloUrl)
         ? `/api/proxy?url=${encodeURIComponent(modeloUrl)}`
         : modeloUrl;
@@ -822,9 +757,6 @@ export function initFerramentas(app) {
     setLights(h, d) {
       hemiLight = h;
       dirLight = d;
-      if (dirLight) {
-        dirLight.shadow.mapSize.set(1024, 1024);
-      }
     },
     getEstado: () => estado,
     getSecaoFilamentos: () => montarSecaoFilamentos(),
@@ -840,5 +772,6 @@ export function initFerramentas(app) {
     },
     atualizarBbox,
     aplicarSuportes,
+    atualizarAuxiliaresVisuais,
   };
 }

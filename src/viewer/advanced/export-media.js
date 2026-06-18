@@ -50,13 +50,24 @@ export function capturarPngTransparente(renderer, scene, camera) {
   link.click();
 }
 
-export async function exportarGifGiro({ renderer, scene, camera, modelPivot, frames = 48, onProgress }) {
+export async function exportarGifGiro({
+  renderer,
+  scene,
+  camera,
+  modelPivot,
+  frames = 48,
+  onProgress,
+  orbit,
+}) {
   const canvas = renderer.domElement;
   if (!canvas.captureStream) {
     throw new Error("Captura de vídeo não suportada neste navegador");
   }
 
-  const qOriginal = modelPivot.quaternion.clone();
+  const usarOrbita = Boolean(orbit?.setTheta && orbit?.updateCamera);
+  const qOriginal = modelPivot?.quaternion?.clone?.();
+  const theta0 = usarOrbita ? orbit.getTheta() : 0;
+
   const stream = canvas.captureStream(12);
   const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
     ? "video/webm;codecs=vp9"
@@ -76,10 +87,15 @@ export async function exportarGifGiro({ renderer, scene, camera, modelPivot, fra
   const passo = (Math.PI * 2) / frames;
 
   for (let i = 0; i <= frames; i++) {
-    modelPivot.quaternion.copy(qOriginal);
-    modelPivot.quaternion.multiply(
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), passo * i)
-    );
+    if (usarOrbita) {
+      orbit.setTheta(theta0 + passo * i);
+      orbit.updateCamera();
+    } else if (modelPivot && qOriginal) {
+      modelPivot.quaternion.copy(qOriginal);
+      modelPivot.quaternion.multiply(
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), passo * i)
+      );
+    }
     renderer.render(scene, camera);
     onProgress?.(i, frames);
     await new Promise((r) => setTimeout(r, 80));
@@ -88,7 +104,12 @@ export async function exportarGifGiro({ renderer, scene, camera, modelPivot, fra
   recorder.stop();
   const blob = await gravacao;
 
-  modelPivot.quaternion.copy(qOriginal);
+  if (usarOrbita) {
+    orbit.setTheta(theta0);
+    orbit.updateCamera();
+  } else if (modelPivot && qOriginal) {
+    modelPivot.quaternion.copy(qOriginal);
+  }
   renderer.render(scene, camera);
 
   const link = document.createElement("a");

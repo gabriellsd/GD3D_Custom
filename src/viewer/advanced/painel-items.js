@@ -102,7 +102,7 @@ export function initPainelItems(app) {
     if (!no) return;
 
     if (no.tipo === 'peca') {
-      no.grupo.object3d.remove(no.peca.object3d);
+      no.peca.object3d.parent?.remove(no.peca.object3d);
       no.peca.object3d.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
@@ -244,7 +244,7 @@ function render() {
         nome: p.nome,
         visivel: true,
         object3d: p.object3d,
-        cores: [],
+        cores: p.cores ?? [],
       })),
     };
     estado.grupos.push(grupo);

@@ -278,9 +278,51 @@ export function flattenAssemblyComponents(components, files, options = {}) {
 }
 
 export function parseObjectModelPath(mainModelXml) {
-  const match = mainModelXml.match(/p:path="([^"]+\.model)"/i);
-  if (!match) return '3D/Objects/object_1.model';
-  return match[1].replace(/^\//, '');
+  const patterns = [/p:path="([^"]+\.model)"/i, /\bpath="([^"]+\.model)"/i];
+  for (const re of patterns) {
+    const match = mainModelXml.match(re);
+    if (match) return match[1].replace(/^\//, '');
+  }
+  return '3D/Objects/object_1.model';
+}
+
+/** Resolve o .model com mesh quando object_1.model não existe (ex.: object_2.model). */
+export function resolveObjectModelPath(files, mainModelXml) {
+  const candidates = [];
+
+  function add(path) {
+    if (!path) return;
+    const normalized = path.replace(/^\//, '');
+    if (!candidates.includes(normalized)) candidates.push(normalized);
+  }
+
+  add(parseObjectModelPath(mainModelXml));
+
+  for (const match of mainModelXml.matchAll(/\b(?:p:)?path="([^"]+\.model)"/gi)) {
+    add(match[1]);
+  }
+
+  const rels = readZipText(files, '3D/_rels/3dmodel.model.rels');
+  if (rels) {
+    for (const match of rels.matchAll(/Target="([^"]+\.model)"/gi)) {
+      add(match[1]);
+    }
+  }
+
+  for (const path of buildObjectIdPathMap(files).values()) {
+    add(path);
+  }
+
+  for (const key of Object.keys(files)) {
+    const path = key.replace(/\\/g, '/');
+    if (/3D\/Objects\/object_\d+\.model$/i.test(path)) add(path);
+  }
+
+  for (const candidate of candidates) {
+    if (readZipText(files, candidate)) return candidate.replace(/^\//, '');
+  }
+
+  return candidates[0]?.replace(/^\//, '') ?? '3D/Objects/object_1.model';
 }
 
 export function parseBuildItems(mainModelXml, objectPath, objectIdPathMap = null) {
@@ -712,12 +754,35 @@ function collectUsedSlots(objectXml, defaultExtruder) {
   const used = new Set();
   let match;
 
+  TRIANGLE_RE.lastIndex = 0;
   while ((match = TRIANGLE_RE.exec(trianglesPart[0])) !== null) {
     const paintedSlot = decodeBambuPaintSlot(match[4]);
     used.add(paintedSlot ?? defaultExtruder);
   }
 
   return used;
+}
+
+/** Slots de filamento para um mesh (paint_color ou extruder da peça). */
+export function slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder) {
+  if (objectXmlHasPaintColor(objectXml)) {
+    return [...collectUsedSlots(objectXml, defaultExtruder)].sort((a, b) => a - b);
+  }
+
+  const partExtruders = parsePartExtruders(modelSettings);
+  if (partExtruders.size) {
+    return [...new Set(partExtruders.values())].sort((a, b) => a - b);
+  }
+
+  const partMeta = parsePartMetadata(modelSettings);
+  const fromMeta = [...partMeta.values()]
+    .map((m) => m.extruder)
+    .filter((n) => Number.isFinite(n));
+  if (fromMeta.length) {
+    return [...new Set(fromMeta)].sort((a, b) => a - b);
+  }
+
+  return [defaultExtruder];
 }
 
 /**
@@ -735,8 +800,10 @@ export function extractFilamentColorsFrom3mfBuffer(buffer) {
   const modelSettings = readZipText(files, 'Metadata/model_settings.config');
   const filamentColours = parseFilamentColours(projectSettings);
   const defaultExtruder = parseDefaultExtruder(modelSettings);
-  const objectPath = parseObjectModelPath(mainModel);
+  const objectPath = resolveObjectModelPath(files, mainModel);
   const objectFileXml = readZipText(files, objectPath);
+  if (!objectFileXml) return [];
+
   const components = resolverMontagem(mainModel, objectPath, objectFileXml, files);
 
   if (components.length > 1) {
@@ -758,7 +825,7 @@ export function extractFilamentColorsFrom3mfBuffer(buffer) {
   const objectXml = readZipText(files, objectPath);
   if (!objectXml) return [];
 
-  const usedSlots = [...collectUsedSlots(objectXml, defaultExtruder)].sort((a, b) => a - b);
+  const usedSlots = slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder);
   const seen = new Set();
   const colors = [];
 
@@ -780,7 +847,7 @@ export function getBambu3mfMeshXml(files) {
   const mainModel = readZipText(files, '3D/3dmodel.model');
   if (!mainModel) throw new Error('3MF Bambu: 3dmodel.model em falta');
 
-  const objectPath = parseObjectModelPath(mainModel);
+  const objectPath = resolveObjectModelPath(files, mainModel);
   const objectXml = readZipText(files, objectPath);
   if (!objectXml) throw new Error(`3MF Bambu: ${objectPath} em falta`);
 

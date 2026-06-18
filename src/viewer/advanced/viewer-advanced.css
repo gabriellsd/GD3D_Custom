@@ -705,6 +705,62 @@ ul {
   pointer-events: none;
 }
 
+.medidas-overlay {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(12, 12, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+  color: #bac2de;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.medidas-overlay.hidden {
+  display: none;
+}
+
+.medidas-overlay strong {
+  color: #f9e2af;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.barra-modelo-toggles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.barra-modelo-acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.barra-modelo-acoes .barra-flyout-acao {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  height: auto;
+  min-height: 36px;
+}
+
+.barra-modelo-acoes .barra-flyout-item-label {
+  display: inline;
+  font-size: 11px;
+}
+
 body:fullscreen .viewer-advanced-root aside {
   display: none;
 }

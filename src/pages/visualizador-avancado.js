@@ -16,7 +16,8 @@ import * as THREE from "three";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
     import { initPainelItems, nomeGrupoImportacao } from "../viewer/advanced/painel-items.js";
     import { renderViewerAsideNav } from "../layout/header.js";
-    import { extrairCoresDoObject, metaBambuDoObject } from "../viewer/advanced/cores-modelo.js";
+    import { extrairCoresDoObject, metaBambuDoObject, extrairCoresDo3mfBuffer, materialFilamentoBambu } from "../viewer/advanced/cores-modelo.js";
+    import { detectarPecasSeparaveis } from "../viewer/advanced/pecas-modelo.js";
 
 (async () => {
     await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
@@ -32,21 +33,29 @@ import * as THREE from "three";
 
     const backgrounds = [0x080808, 0x141414, 0xffffff, 0x2d2d2d];
     let bgIndex = 0;
-    let wireframe = false;
     let usarCores = true;
     let currentModel = null;
     const materiaisOriginais = new Map();
     const meshComCorVertice = new Set();
     const COR_PADRAO = 0xe8a317;
     let cameraDistance = 5;
+    let minCameraDistance = 0.05;
 
-    const ZOOM_FACTOR = 1.08;
+    /** Órbita esférica: theta=0 → câmara em +Z (frente do modelo). */
+    const orbit = {
+      theta: 0,
+      phi: Math.PI / 2 - 0.2,
+      minPhi: 0.1,
+      maxPhi: Math.PI - 0.1,
+    };
+
+    const ZOOM_SENS = 0.001;
+    const ZOOM_MAX = 50000;
     const panOffset = new THREE.Vector3();
     const centroVisao = new THREE.Vector3();
     const eixoCameraDireita = new THREE.Vector3();
     const eixoCameraCima = new THREE.Vector3();
     const rotacaoQuat = new THREE.Quaternion();
-    const deltaRotacao = new THREE.Quaternion();
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(backgrounds[bgIndex]);
@@ -55,6 +64,39 @@ import * as THREE from "three";
     scene.add(modelPivot);
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 100000);
+
+    function resetOrbitFrontal() {
+      orbit.theta = 0;
+      orbit.phi = Math.PI / 2 - 0.2;
+    }
+
+    function posicionarCameraOrbita(alvoX, alvoY, alvoZ) {
+      const r = cameraDistance;
+      const sinPhi = Math.sin(orbit.phi);
+      camera.position.set(
+        alvoX + r * sinPhi * Math.sin(orbit.theta),
+        alvoY + r * Math.cos(orbit.phi),
+        alvoZ + r * sinPhi * Math.cos(orbit.theta)
+      );
+      camera.lookAt(alvoX, alvoY, alvoZ);
+    }
+
+    function getCentroModelo() {
+      if (!currentModel) return centroVisao.set(0, 0, 0);
+      new THREE.Box3().setFromObject(modelPivot).getCenter(centroVisao);
+      return centroVisao;
+    }
+
+    function updateCamera() {
+      getCentroModelo();
+      posicionarCameraOrbita(
+        centroVisao.x + panOffset.x,
+        centroVisao.y + panOffset.y,
+        centroVisao.z + panOffset.z
+      );
+    }
+
+    updateCamera();
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -66,7 +108,6 @@ import * as THREE from "three";
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
     dirLight.position.set(4, 6, 5);
     scene.add(dirLight);
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const drag = {
       active: false,
@@ -77,26 +118,9 @@ import * as THREE from "three";
 
     const canvas = renderer.domElement;
 
-    function getCentroModelo() {
-      if (!currentModel) return centroVisao.set(0, 0, 0);
-      new THREE.Box3().setFromObject(modelPivot).getCenter(centroVisao);
-      return centroVisao;
-    }
-
-    function updateCamera() {
-      getCentroModelo();
-      const alvoX = centroVisao.x + panOffset.x;
-      const alvoY = centroVisao.y + panOffset.y;
-      const alvoZ = centroVisao.z + panOffset.z;
-      camera.position.set(alvoX, alvoY + cameraDistance * 0.18, alvoZ + cameraDistance);
-      camera.lookAt(alvoX, alvoY, alvoZ);
-    }
-
-    updateCamera();
-
-    function velocidadeRotacao() {
+    function velocidadeOrbita() {
       const largura = container.clientWidth || 800;
-      return (Math.PI * 2) / largura;
+      return (Math.PI * 1.15) / largura;
     }
 
     function aplicarRotacao() {
@@ -108,20 +132,22 @@ import * as THREE from "three";
       aplicarRotacao();
     }
 
-    function rotarModelo(dx, dy) {
-      const velocidade = velocidadeRotacao();
-      camera.updateMatrixWorld();
+    function orbitarCamera(dx, dy) {
+      const sens = velocidadeOrbita();
+      orbit.theta -= dx * sens;
+      orbit.phi = THREE.MathUtils.clamp(orbit.phi - dy * sens, orbit.minPhi, orbit.maxPhi);
+      updateCamera();
+    }
 
-      eixoCameraCima.setFromMatrixColumn(camera.matrix, 1).normalize();
-      eixoCameraDireita.setFromMatrixColumn(camera.matrix, 0).normalize();
+    function addOrbitTheta(delta) {
+      orbit.theta += delta;
+      updateCamera();
+    }
 
-      deltaRotacao.setFromAxisAngle(eixoCameraCima, -dx * velocidade);
-      rotacaoQuat.premultiply(deltaRotacao);
-
-      deltaRotacao.setFromAxisAngle(eixoCameraDireita, -dy * velocidade);
-      rotacaoQuat.premultiply(deltaRotacao);
-
-      aplicarRotacao();
+    function setOrbitAngles(theta, phi) {
+      orbit.theta = theta;
+      orbit.phi = THREE.MathUtils.clamp(phi, orbit.minPhi, orbit.maxPhi);
+      updateCamera();
     }
 
     function criarContainerModelo(object, ext) {
@@ -208,7 +234,7 @@ import * as THREE from "three";
         return;
       }
 
-      rotarModelo(dx, dy);
+      orbitarCamera(dx, dy);
       ferramentas?.onPointerMoveDrag(dx);
     });
 
@@ -216,8 +242,15 @@ import * as THREE from "three";
       "wheel",
       (event) => {
         event.preventDefault();
-        const factor = event.deltaY > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-        cameraDistance = THREE.MathUtils.clamp(cameraDistance * factor, 0.05, 50000);
+        let delta = event.deltaY;
+        if (event.deltaMode === 1) delta *= 16;
+        else if (event.deltaMode === 2) delta *= 100;
+        const escala = Math.exp(-delta * ZOOM_SENS);
+        cameraDistance = THREE.MathUtils.clamp(
+          cameraDistance * escala,
+          minCameraDistance,
+          ZOOM_MAX
+        );
         updateCamera();
       },
       { passive: false }
@@ -317,6 +350,7 @@ import * as THREE from "three";
         formato: ultimoFormato,
       });
       atualizarCoresUi();
+      ferramentas?.atualizarAuxiliaresVisuais?.();
     }
 
     function setPanOffset(x, y, z) {
@@ -361,10 +395,13 @@ import * as THREE from "three";
       object.position.sub(center);
 
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      cameraDistance = maxDim * 2.5;
+      minCameraDistance = maxDim * 0.12;
+      cameraDistance = maxDim * 2.2;
       panOffset.set(0, 0, 0);
       resetarRotacao();
+      resetOrbitFrontal();
       updateCamera();
+      ferramentas?.atualizarAuxiliaresVisuais?.();
     }
 
     const vetorA = new THREE.Vector3();
@@ -880,7 +917,6 @@ import * as THREE from "three";
         vertexColors: !!temCores,
         metalness: 0.1,
         roughness: 0.6,
-        wireframe,
       });
     }
 
@@ -888,7 +924,6 @@ import * as THREE from "three";
       if (!material) return materialPadrao(geometria);
 
       const clone = material.clone();
-      clone.wireframe = wireframe;
 
       if (geometria?.attributes?.color) {
         clone.vertexColors = true;
@@ -925,6 +960,8 @@ import * as THREE from "three";
     }
 
     function aplicarVisual(object) {
+      const metaBambu = ultimoExtras?.bambu ?? null;
+
       object.traverse((child) => {
         if (!child.isMesh) return;
 
@@ -932,7 +969,7 @@ import * as THREE from "three";
           const originais = materiaisOriginais.get(child.uuid);
           const clonados = originais.map((material) => {
             const mat = material.clone();
-            mat.wireframe = wireframe;
+            if (child.name?.startsWith("filament-")) mat.flatShading = false;
             if (meshComCorVertice.has(child.uuid)) mat.vertexColors = true;
             for (const chave of ["map", "emissiveMap", "specularMap"]) {
               if (mat[chave]) mat[chave].colorSpace = THREE.SRGBColorSpace;
@@ -940,6 +977,12 @@ import * as THREE from "three";
             return mat;
           });
           child.material = clonados.length === 1 ? clonados[0] : clonados;
+          return;
+        }
+
+        const matBambu = materialFilamentoBambu(child, metaBambu);
+        if (matBambu) {
+          child.material = matBambu;
           return;
         }
 
@@ -970,10 +1013,13 @@ import * as THREE from "three";
       const entradas = [];
       for (const grupo of painelItems?.getGrupos() ?? []) {
         for (const peca of grupo.pecas) {
+          const meta = metaBambuDoObject(peca.object3d);
           entradas.push({
             id: peca.id,
             nome: peca.nome,
-            cores: extrairCoresDoObject(peca.object3d, metaBambuDoObject(peca.object3d)),
+            cores: peca.cores?.length
+              ? peca.cores
+              : extrairCoresDoObject(peca.object3d, meta),
           });
         }
       }
@@ -1015,6 +1061,10 @@ import * as THREE from "three";
       if (!comCor.length) {
         row.innerHTML = "";
         contagem.textContent = "";
+        vazio.textContent =
+          entradas.length === 1
+            ? "Este ficheiro não contém dados de cor (apenas geometria)."
+            : `${entradas.length} ficheiros sem dados de cor nos arquivos.`;
         vazio.classList.remove("hidden");
         return;
       }
@@ -1128,6 +1178,19 @@ import * as THREE from "three";
       setStatus(`Modelo carregado: ${arquivoMeta.nome}`);
     }
 
+    function montarPecasImportacao(object, nomeFicheiro, extras = {}) {
+      const inner = object.children[0]?.children?.[0] ?? object;
+      const separadas = detectarPecasSeparaveis(inner, extras.bambu);
+      if (separadas?.length >= 2) {
+        return separadas.map((peca) => ({
+          nome: peca.nome,
+          object3d: peca.object3d,
+          cores: peca.cores ?? [],
+        }));
+      }
+      return [{ nome: nomeFicheiro, object3d: object, cores: extras.coresArquivo ?? [] }];
+    }
+
     function showModel(object, arquivoMeta, extras = {}, { append = false } = {}) {
       const nomeFicheiro = ultimoArquivoFile?.name || arquivoMeta.nome || "Modelo";
       const importGroup = new THREE.Group();
@@ -1135,13 +1198,14 @@ import * as THREE from "three";
       object.name = nomeBaseArquivo({ name: nomeFicheiro });
       importGroup.add(object);
       if (extras.bambu) object.userData.bambuExtras = extras.bambu;
+      if (Array.isArray(extras.coresArquivo)) object.userData.coresArquivo = extras.coresArquivo;
 
       apresentarImportacao({
         importGroups: [
           {
             nome: importGroup.name,
             object3d: importGroup,
-            pecas: [{ nome: nomeFicheiro, object3d: object }],
+            pecas: montarPecasImportacao(object, nomeFicheiro, extras),
           },
         ],
         arquivoMeta,
@@ -1187,6 +1251,7 @@ import * as THREE from "three";
           const resultado = carregar3mf(buffer);
           object = resultado.object;
           extras.bambu = resultado.meta;
+          extras.coresArquivo = extrairCoresDo3mfBuffer(buffer);
         } else {
           throw new Error(`Formato .${ext} não suportado.`);
         }
@@ -1213,6 +1278,7 @@ import * as THREE from "three";
       const wrapped = criarContainerModelo(object, ext);
       wrapped.name = nomeBaseArquivo(arquivo);
       if (extras.bambu) wrapped.userData.bambuExtras = extras.bambu;
+      if (Array.isArray(extras.coresArquivo)) wrapped.userData.coresArquivo = extras.coresArquivo;
       return { wrapped, extras, ext, arquivo };
     }
 
@@ -1242,7 +1308,11 @@ import * as THREE from "three";
 
         const pecas = carregados.map((item) => {
           importGroup.add(item.wrapped);
-          return { nome: item.arquivo.name, object3d: item.wrapped };
+          return {
+            nome: item.arquivo.name,
+            object3d: item.wrapped,
+            cores: item.extras.coresArquivo ?? [],
+          };
         });
 
         if (append) {
@@ -1371,13 +1441,6 @@ import * as THREE from "three";
       setStatus(usarCores ? "Cores originais ativadas" : "Cores originais desativadas");
     });
 
-    document.getElementById("chk-wireframe")?.addEventListener("change", (e) => {
-      wireframe = e.target.checked;
-      if (currentModel) aplicarVisual(currentModel);
-      ferramentas?.salvarPreferencias({ wireframe: e.target.checked });
-      setStatus(wireframe ? "Wireframe ativado" : "Wireframe desativado");
-    });
-
     document.getElementById("fundos")?.addEventListener("click", (e) => {
       const btn = e.target.closest(".fundo-btn");
       if (!btn) return;
@@ -1407,25 +1470,29 @@ import * as THREE from "three";
       getRotacaoQuat: () => rotacaoQuat,
       aplicarRotacao,
       resetarRotacao,
-      getVelocidadeRotacao: velocidadeRotacao,
+      getOrbitTheta: () => orbit.theta,
+      setOrbitTheta: (v) => {
+        orbit.theta = v;
+        updateCamera();
+      },
+      setOrbitAngles,
+      addOrbitTheta,
+      resetOrbitFrontal,
       updateCamera,
       centerAndFrame,
       setPanOffset,
       setStatus,
       loadFile,
       aplicarVisual,
-      getWireframe: () => wireframe,
       converterMedidas,
       formatarVolume,
       unidadeParaCena,
       cenaParaMetros,
       formatarDistancia,
+      analisarGeometria,
+      getFormato: () => ultimoFormato,
       aplicarPreferenciaCores: (valor) => {
         usarCores = valor;
-        if (currentModel) aplicarVisual(currentModel);
-      },
-      aplicarPreferenciaWireframe: (valor) => {
-        wireframe = valor;
         if (currentModel) aplicarVisual(currentModel);
       },
       aplicarPreferenciaFundo: (indice) => {
@@ -1460,6 +1527,14 @@ import * as THREE from "three";
       carregarObjetoBruto,
       criarContainerModelo,
       getFerramentas: () => ferramentas,
+      getOrbitControl: () => ({
+        getTheta: () => orbit.theta,
+        setTheta: (v) => {
+          orbit.theta = v;
+          updateCamera();
+        },
+        updateCamera,
+      }),
       refreshModelVisual: (model) => {
         salvarEstadoVisual(model);
         aplicarVisual(model);

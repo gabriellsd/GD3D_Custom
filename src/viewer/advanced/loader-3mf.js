@@ -230,7 +230,15 @@ export function carregar3mf(arrayBuffer, options = {}) {
     arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer);
 
   if (detectarBambu3mf(buffer)) {
-    return parseBambu3mfBuffer(buffer, options);
+    try {
+      return parseBambu3mfBuffer(buffer, options);
+    } catch (err) {
+      if (/em falta/i.test(err?.message || "")) {
+        console.warn("3MF Bambu: fallback para loader padrão —", err.message);
+        return { object: carregar3mfPadrao(buffer), meta: null };
+      }
+      throw err;
+    }
   }
 
   return { object: carregar3mfPadrao(buffer), meta: null };

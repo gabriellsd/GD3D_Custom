@@ -9,6 +9,8 @@ import {
   extractInnerObjectXml,
   parseObjectModelPath,
   resolverMontagem,
+  slotsFilamentoUsados,
+  resolveObjectModelPath,
 } from "../bambu3mfParse.js";
 
 const SLOT_CODES = [
@@ -261,7 +263,7 @@ function buildColoredGroup(objectXml, filamentColours, defaultExtruder) {
     const colorHex = normalizarCorHex(filamentColours[slot - 1]) || "#CCCCCC";
     const material = new THREE.MeshPhongMaterial({
       color: new THREE.Color(colorHex),
-      flatShading: true,
+      flatShading: false,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -371,7 +373,7 @@ export function parseBambu3mfBuffer(buffer, options = {}) {
   const filamentColours = parseFilamentColours(projectSettings);
   const defaultExtruder = parseDefaultExtruder(modelSettings);
 
-  const objectPath = parseObjectModelPath(mainModel);
+  const objectPath = resolveObjectModelPath(arquivos, mainModel);
   const objectXml = lerTextoZip(arquivos, objectPath);
   if (!objectXml) throw new Error(`3MF Bambu: ${objectPath} em falta`);
 
@@ -392,10 +394,14 @@ export function parseBambu3mfBuffer(buffer, options = {}) {
       );
     } catch (err) {
       if (!/vazia/i.test(err?.message || "")) throw err;
-      object = buildColoredGroup(objectXml, filamentColours, defaultExtruder);
+      const extruder =
+        slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder)[0] ?? defaultExtruder;
+      object = buildColoredGroup(objectXml, filamentColours, extruder);
     }
   } else {
-    object = buildColoredGroup(objectXml, filamentColours, defaultExtruder);
+    const extruder =
+      slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder)[0] ?? defaultExtruder;
+    object = buildColoredGroup(objectXml, filamentColours, extruder);
   }
 
   return {

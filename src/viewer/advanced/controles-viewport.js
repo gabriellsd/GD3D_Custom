@@ -11,15 +11,10 @@ const VISTAS = [
 
 const EXIBICAO_TOGGLES = [
   { id: "chk-cores", icon: "fa-palette", title: "Cores originais", checked: true },
-  { id: "chk-wireframe", icon: "fa-border-all", title: "Wireframe (W)" },
   { id: "chk-giro-auto", icon: "fa-rotate", title: "Giro automático" },
-  { id: "chk-sombra", icon: "fa-cloud-sun", title: "Sombra no chão" },
   { id: "chk-bbox", icon: "fa-box", title: "Caixa delimitadora" },
-  { id: "chk-referencia", icon: "fa-ruler-horizontal", title: "Referência 1 cm" },
   { id: "chk-ortografico", icon: "fa-square", title: "Ortográfico" },
-  { id: "chk-overhangs", icon: "fa-triangle-exclamation", title: "Overhangs (>45°)" },
   { id: "chk-regua", icon: "fa-ruler-combined", title: "Régua (2 cliques)" },
-  { id: "chk-plano-corte", icon: "fa-scissors", title: "Plano de corte" },
   {
     id: "chk-suportes",
     icon: "fa-layer-group",
@@ -27,6 +22,17 @@ const EXIBICAO_TOGGLES = [
     linhaId: "linha-suportes",
     hidden: true,
   },
+];
+
+const MODELO_TOGGLES = [
+  { id: "chk-grade", icon: "fa-table-cells", title: "Grade no chão" },
+  { id: "chk-eixos", icon: "fa-arrows-up-down-left-right", title: "Eixos XYZ" },
+  { id: "chk-medidas", icon: "fa-ruler-vertical", title: "Medidas na tela" },
+];
+
+const MODELO_ACOES = [
+  { id: "btn-copiar-medidas", icon: "fa-copy", label: "Copiar dimensões" },
+  { id: "btn-reset-pan", icon: "fa-arrows-up-down-left-right", label: "Resetar pan" },
 ];
 
 function renderExibicaoToggle(opcao) {
@@ -53,14 +59,26 @@ function renderVistasFlyout() {
     ).join("")}`;
 }
 
+function renderModeloFlyout() {
+  const toggles = MODELO_TOGGLES.map(renderExibicaoToggle).join("");
+  const acoes = MODELO_ACOES.map(
+    ({ id, icon, label }) =>
+      `<button type="button" class="barra-vistas-btn barra-flyout-acao" id="${id}" title="${label}">
+        <i class="fa-solid ${icon}" aria-hidden="true"></i>
+        <span class="barra-flyout-item-label">${label}</span>
+      </button>`
+  ).join("");
+  return `
+    <div class="barra-modelo-toggles">${toggles}</div>
+    <div class="barra-modelo-acoes">${acoes}</div>`;
+}
+
 function renderFerramentasFlyout() {
   const itens = [
     { id: "btn-screenshot", icon: "fa-camera", label: "Captura (S)" },
     { id: "btn-png-alpha", icon: "fa-image", label: "PNG transparente" },
     { id: "btn-gif-giro", icon: "fa-clapperboard", label: "Vídeo giro" },
     { id: "btn-fullscreen", icon: "fa-expand", label: "Tela cheia (F)" },
-    { id: "btn-ar", icon: "fa-vr-cardboard", label: "Ver em AR", hidden: true },
-    { id: "btn-compartilhar", icon: "fa-share-nodes", label: "Compartilhar" },
   ];
   return itens
     .map(
@@ -78,10 +96,6 @@ function renderAmbienteFlyout() {
     <label class="barra-flyout-slider">
       <span class="barra-flyout-slider-label"><i class="fa-solid fa-sun" aria-hidden="true"></i> Iluminação</span>
       <input type="range" id="slider-luz" min="0.2" max="2.5" step="0.05" value="1.1" />
-    </label>
-    <label class="barra-flyout-slider">
-      <span class="barra-flyout-slider-label"><i class="fa-solid fa-grip-lines" aria-hidden="true"></i> Altura do corte</span>
-      <input type="range" id="slider-plano-corte" min="-10" max="10" step="0.01" value="0" />
     </label>
     <div class="barra-flyout-fundos">
       <span class="barra-flyout-fundos-label">Fundo</span>
@@ -192,6 +206,13 @@ function montarBarraLateralExibicao(container) {
         title: "Vistas",
         layout: "grid",
         conteudo: renderVistasFlyout(),
+      })}
+      ${renderGrupo({
+        id: "modelo",
+        icon: "fa-ruler-combined",
+        title: "Modelo",
+        layout: "stack",
+        conteudo: renderModeloFlyout(),
       })}
       ${renderGrupo({
         id: "ferramentas",
