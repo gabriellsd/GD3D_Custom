@@ -25,9 +25,9 @@ const EXIBICAO_TOGGLES = [
 ];
 
 const MODELO_TOGGLES = [
+  { id: "chk-cenario-mesa", icon: "fa-camera-retro", title: "Estúdio GD3D" },
   { id: "chk-grade", icon: "fa-table-cells", title: "Grade no chão" },
   { id: "chk-eixos", icon: "fa-arrows-up-down-left-right", title: "Eixos XYZ" },
-  { id: "chk-medidas", icon: "fa-ruler-vertical", title: "Medidas na tela" },
 ];
 
 const MODELO_ACOES = [
@@ -59,18 +59,32 @@ function renderVistasFlyout() {
     ).join("")}`;
 }
 
-function renderModeloFlyout() {
-  const toggles = MODELO_TOGGLES.map(renderExibicaoToggle).join("");
-  const acoes = MODELO_ACOES.map(
-    ({ id, icon, label }) =>
-      `<button type="button" class="barra-vistas-btn barra-flyout-acao" id="${id}" title="${label}">
-        <i class="fa-solid ${icon}" aria-hidden="true"></i>
-        <span class="barra-flyout-item-label">${label}</span>
-      </button>`
-  ).join("");
+function renderModeloLinhaToggle(opcao) {
+  const checkedAttr = opcao.checked ? " checked" : "";
   return `
-    <div class="barra-modelo-toggles">${toggles}</div>
-    <div class="barra-modelo-acoes">${acoes}</div>`;
+    <label class="barra-modelo-linha barra-modelo-linha--toggle" title="${opcao.title}">
+      <input type="checkbox" id="${opcao.id}"${checkedAttr} />
+      <span class="barra-modelo-icone" aria-hidden="true"><i class="fa-solid ${opcao.icon}"></i></span>
+      <span class="barra-modelo-texto">${opcao.title}</span>
+    </label>`;
+}
+
+function renderModeloLinhaAcao({ id, icon, label, hidden = false }) {
+  return `
+    <button type="button" class="barra-modelo-linha barra-modelo-linha--acao${hidden ? " hidden" : ""}" id="${id}" title="${label}">
+      <span class="barra-modelo-icone" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>
+      <span class="barra-modelo-texto">${label}</span>
+    </button>`;
+}
+
+function renderModeloFlyout() {
+  const toggles = MODELO_TOGGLES.map(renderModeloLinhaToggle).join("");
+  const acoes = MODELO_ACOES.map(renderModeloLinhaAcao).join("");
+  return `
+    <div class="barra-modelo-lista">
+      <div class="barra-modelo-grupo">${toggles}</div>
+      <div class="barra-modelo-grupo barra-modelo-grupo--acoes">${acoes}</div>
+    </div>`;
 }
 
 function renderFerramentasFlyout() {
@@ -80,15 +94,10 @@ function renderFerramentasFlyout() {
     { id: "btn-gif-giro", icon: "fa-clapperboard", label: "Vídeo giro" },
     { id: "btn-fullscreen", icon: "fa-expand", label: "Tela cheia (F)" },
   ];
-  return itens
-    .map(
-      ({ id, icon, label, hidden }) =>
-        `<button type="button" class="barra-vistas-btn barra-flyout-acao${hidden ? " hidden" : ""}" id="${id}" title="${label}">
-          <i class="fa-solid ${icon}" aria-hidden="true"></i>
-          <span class="barra-flyout-item-label">${label}</span>
-        </button>`
-    )
-    .join("");
+  return `
+    <div class="barra-modelo-lista">
+      <div class="barra-modelo-grupo">${itens.map(renderModeloLinhaAcao).join("")}</div>
+    </div>`;
 }
 
 function renderAmbienteFlyout() {
@@ -204,7 +213,7 @@ function montarBarraLateralExibicao(container) {
         id: "vistas",
         icon: "fa-cube",
         title: "Vistas",
-        layout: "grid",
+        layout: "vistas",
         conteudo: renderVistasFlyout(),
       })}
       ${renderGrupo({
@@ -218,7 +227,7 @@ function montarBarraLateralExibicao(container) {
         id: "ferramentas",
         icon: "fa-wand-magic-sparkles",
         title: "Ferramentas",
-        layout: "lista",
+        layout: "stack",
         conteudo: renderFerramentasFlyout(),
       })}
     </nav>`;

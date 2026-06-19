@@ -16,7 +16,7 @@ import * as THREE from "three";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
     import { initPainelItems, nomeGrupoImportacao } from "../viewer/advanced/painel-items.js";
     import { renderViewerAsideNav } from "../layout/header.js";
-    import { extrairCoresDoObject, metaBambuDoObject, extrairCoresDo3mfBuffer, materialFilamentoBambu } from "../viewer/advanced/cores-modelo.js";
+    import { extrairCoresDoObject, metaBambuDoObject, extrairCoresDo3mfBuffer, materialFilamentoBambu, aplicarPolygonOffsetFilamento } from "../viewer/advanced/cores-modelo.js";
     import { detectarPecasSeparaveis } from "../viewer/advanced/pecas-modelo.js";
 
 (async () => {
@@ -35,6 +35,8 @@ import * as THREE from "three";
     let bgIndex = 0;
     let usarCores = true;
     let currentModel = null;
+    let itensSelecionados3d = [];
+    let helpersSelecao = [];
     const materiaisOriginais = new Map();
     const meshComCorVertice = new Set();
     const COR_PADRAO = 0xe8a317;
@@ -82,6 +84,15 @@ import * as THREE from "three";
     }
 
     function getCentroModelo() {
+      if (itensSelecionados3d.length) {
+        const caixa = new THREE.Box3();
+        for (const obj of itensSelecionados3d) {
+          obj.updateMatrixWorld(true);
+          caixa.expandByObject(obj);
+        }
+        caixa.getCenter(centroVisao);
+        return centroVisao;
+      }
       if (!currentModel) return centroVisao.set(0, 0, 0);
       new THREE.Box3().setFromObject(modelPivot).getCenter(centroVisao);
       return centroVisao;
@@ -98,7 +109,11 @@ import * as THREE from "three";
 
     updateCamera();
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+      logarithmicDepthBuffer: true,
+    });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
@@ -114,6 +129,24 @@ import * as THREE from "three";
       panning: false,
       lastX: 0,
       lastY: 0,
+    };
+
+    const pick = {
+      raio: new THREE.Raycaster(),
+      mouse: new THREE.Vector2(),
+      downX: 0,
+      downY: 0,
+      offsetArrasto: new THREE.Vector3(),
+      pontoPlano: new THREE.Vector3(),
+      planoArrasto: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+      pivotLocal: new THREE.Vector3(),
+      eixoLocalX: new THREE.Vector3(),
+      eixoLocalY: new THREE.Vector3(),
+      quatDelta: new THREE.Quaternion(),
+      offsetRotacao: new THREE.Vector3(),
+      hitArrastoInicio: null,
+      posicoesArrastoInicio: [],
+      aguardarSelecaoCtrl: false,
     };
 
     const canvas = renderer.domElement;
@@ -185,8 +218,181 @@ import * as THREE from "three";
     let fbxUrlsAtivas = [];
     const gltfLoader = new GLTFLoader();
 
+    function encontrarGrupoImportacao(object) {
+      let node = object;
+      while (node && node.parent !== currentModel) {
+        node = node.parent;
+      }
+      return node?.parent === currentModel ? node : null;
+    }
+
+    function temVariosModelosNaCena() {
+      return (currentModel?.children?.length ?? 0) > 1;
+    }
+
+    function manipularSelecionadoNaCena() {
+      return Boolean(itensSelecionados3d.length && temVariosModelosNaCena());
+    }
+
+    function atualizarHelpersSelecao() {
+      for (const helper of helpersSelecao) helper.update?.();
+    }
+
+    function ajustarZoomAosItensSelecionados() {
+      if (!itensSelecionados3d.length) return;
+      const caixa = new THREE.Box3();
+      for (const obj of itensSelecionados3d) {
+        obj.updateMatrixWorld(true);
+        caixa.expandByObject(obj);
+      }
+      const size = caixa.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      minCameraDistance = maxDim * 0.12;
+      camera.near = Math.max(maxDim * 0.002, 0.01);
+      camera.far = Math.max(maxDim * 200, 1000);
+      camera.updateProjectionMatrix();
+    }
+
+    function definirItensSelecionados(object3ds) {
+      itensSelecionados3d = object3ds?.length ? [...object3ds] : [];
+      for (const helper of helpersSelecao) scene.remove(helper);
+      helpersSelecao = [];
+
+      if (itensSelecionados3d.length) {
+        for (const obj of itensSelecionados3d) {
+          const helper = new THREE.BoxHelper(obj, 0xe8a317);
+          scene.add(helper);
+          helpersSelecao.push(helper);
+        }
+        ajustarZoomAosItensSelecionados();
+        const n = itensSelecionados3d.length;
+        if (temVariosModelosNaCena()) {
+          setStatus(
+            n === 1
+              ? `Selecionado: ${itensSelecionados3d[0].name} · arrastar girar · Shift+arrastar mover · Ctrl+clique multi`
+              : `${n} modelos selecionados · arrastar girar · Shift+arrastar mover`
+          );
+        } else {
+          setStatus(`Selecionado: ${itensSelecionados3d[0].name}`);
+        }
+      }
+
+      updateCamera();
+      ferramentas?.atualizarAuxiliaresVisuais?.();
+      atualizarCoresUi();
+      atualizarPainelInfo();
+    }
+
+    function centroLocalDoObjeto(obj) {
+      obj.updateMatrixWorld(true);
+      const centroMundo = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
+      pick.pivotLocal.copy(obj.parent ? obj.parent.worldToLocal(centroMundo) : centroMundo);
+      return pick.pivotLocal;
+    }
+
+    function rotacionarEmTornoDoCentro(obj, deltaQ) {
+      centroLocalDoObjeto(obj);
+      pick.offsetRotacao.copy(obj.position).sub(pick.pivotLocal);
+      pick.offsetRotacao.applyQuaternion(deltaQ);
+      obj.position.copy(pick.pivotLocal).add(pick.offsetRotacao);
+      obj.quaternion.premultiply(deltaQ);
+    }
+
+    function intersetarPlanoDoObjeto(event, obj) {
+      if (!obj) return null;
+      atualizarMouseNDC(event);
+      pick.raio.setFromCamera(pick.mouse, camera);
+      obj.updateMatrixWorld(true);
+      const yBase = new THREE.Box3().setFromObject(obj).min.y;
+      pick.planoArrasto.set(new THREE.Vector3(0, 1, 0), -yBase);
+      return pick.raio.ray.intersectPlane(pick.planoArrasto, pick.pontoPlano)
+        ? pick.pontoPlano.clone()
+        : null;
+    }
+
+    function iniciarArrastoNoPlano(event) {
+      const ref = itensSelecionados3d[0];
+      if (!ref) return false;
+      const hit = intersetarPlanoDoObjeto(event, ref);
+      if (!hit) return false;
+      pick.hitArrastoInicio = hit;
+      pick.posicoesArrastoInicio = itensSelecionados3d.map((obj) => ({
+        obj,
+        pos: obj.position.clone(),
+      }));
+      return true;
+    }
+
+    function moverSelecionadoNoPlano(event) {
+      const ref = itensSelecionados3d[0];
+      if (!ref || !pick.hitArrastoInicio || !pick.posicoesArrastoInicio.length) return;
+      const hit = intersetarPlanoDoObjeto(event, ref);
+      if (!hit) return;
+      const delta = hit.sub(pick.hitArrastoInicio);
+      for (const item of pick.posicoesArrastoInicio) {
+        item.obj.position.copy(item.pos).add(delta);
+        item.obj.updateMatrixWorld(true);
+      }
+      atualizarHelpersSelecao();
+      ferramentas?.atualizarAuxiliaresVisuais?.();
+    }
+
+    function girarSelecionado(dx, dy) {
+      if (!itensSelecionados3d.length) return;
+      const sens = velocidadeOrbita() * 0.85;
+
+      for (const obj of itensSelecionados3d) {
+        pick.eixoLocalY.set(0, 1, 0).applyQuaternion(obj.quaternion).normalize();
+        pick.eixoLocalX.set(1, 0, 0).applyQuaternion(obj.quaternion).normalize();
+
+        const qY = new THREE.Quaternion().setFromAxisAngle(pick.eixoLocalY, -dx * sens);
+        const qX = new THREE.Quaternion().setFromAxisAngle(pick.eixoLocalX, -dy * sens);
+        pick.quatDelta.copy(qY).multiply(qX);
+
+        rotacionarEmTornoDoCentro(obj, pick.quatDelta);
+        obj.updateMatrixWorld(true);
+      }
+      atualizarHelpersSelecao();
+      ferramentas?.atualizarAuxiliaresVisuais?.();
+    }
+
+    function atualizarMouseNDC(event) {
+      const rect = canvas.getBoundingClientRect();
+      pick.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pick.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    function selecionarGrupoNaCena(event) {
+      if (!currentModel) return;
+      atualizarMouseNDC(event);
+      pick.raio.setFromCamera(pick.mouse, camera);
+      const hits = pick.raio.intersectObject(currentModel, true);
+      if (!hits.length) {
+        if (!(event.ctrlKey || event.metaKey)) {
+          definirItensSelecionados([]);
+          painelItems?.limparSelecao?.();
+        }
+        return;
+      }
+      const grupo = encontrarGrupoImportacao(hits[0].object);
+      if (!grupo) return;
+      painelItems?.selecionarPorObject3d?.(grupo, {
+        ctrlKey: event.ctrlKey || event.metaKey,
+      });
+    }
+
     canvas.addEventListener("pointerdown", (event) => {
       if (ferramentas?.onPointerDown(event)) return;
+
+      if (event.button === 0 && (event.ctrlKey || event.metaKey)) {
+        pick.aguardarSelecaoCtrl = true;
+        pick.downX = event.clientX;
+        pick.downY = event.clientY;
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+
+      pick.aguardarSelecaoCtrl = false;
 
       if (event.button === 0 && !event.shiftKey) {
         drag.active = true;
@@ -203,10 +409,37 @@ import * as THREE from "three";
 
       drag.lastX = event.clientX;
       drag.lastY = event.clientY;
+      pick.downX = event.clientX;
+      pick.downY = event.clientY;
+
+      if (drag.panning && manipularSelecionadoNaCena()) {
+        iniciarArrastoNoPlano(event);
+      }
+
       canvas.setPointerCapture(event.pointerId);
     });
 
     canvas.addEventListener("pointerup", (event) => {
+      if (pick.aguardarSelecaoCtrl && event.button === 0) {
+        pick.aguardarSelecaoCtrl = false;
+        if (Math.hypot(event.clientX - pick.downX, event.clientY - pick.downY) < 6) {
+          selecionarGrupoNaCena(event);
+        }
+        if (canvas.hasPointerCapture(event.pointerId)) {
+          canvas.releasePointerCapture(event.pointerId);
+        }
+        return;
+      }
+
+      if (
+        drag.active &&
+        !drag.panning &&
+        event.button === 0 &&
+        Math.hypot(event.clientX - pick.downX, event.clientY - pick.downY) < 6
+      ) {
+        selecionarGrupoNaCena(event);
+      }
+
       drag.active = false;
       drag.panning = false;
       ferramentas?.onPointerUp();
@@ -224,13 +457,22 @@ import * as THREE from "three";
       drag.lastY = event.clientY;
 
       if (drag.panning) {
-        camera.updateMatrixWorld();
-        eixoCameraDireita.setFromMatrixColumn(camera.matrix, 0);
-        eixoCameraCima.setFromMatrixColumn(camera.matrix, 1);
-        const factor = cameraDistance * 0.0015;
-        panOffset.addScaledVector(eixoCameraDireita, -dx * factor);
-        panOffset.addScaledVector(eixoCameraCima, dy * factor);
-        updateCamera();
+        if (manipularSelecionadoNaCena()) {
+          moverSelecionadoNoPlano(event);
+        } else {
+          camera.updateMatrixWorld();
+          eixoCameraDireita.setFromMatrixColumn(camera.matrix, 0);
+          eixoCameraCima.setFromMatrixColumn(camera.matrix, 1);
+          const factor = cameraDistance * 0.0015;
+          panOffset.addScaledVector(eixoCameraDireita, -dx * factor);
+          panOffset.addScaledVector(eixoCameraCima, dy * factor);
+          updateCamera();
+        }
+        return;
+      }
+
+      if (manipularSelecionadoNaCena()) {
+        girarSelecionado(dx, dy);
         return;
       }
 
@@ -316,6 +558,7 @@ import * as THREE from "three";
         publicarProduto?.onModelCleared();
         setPainelPosModelo(false);
       }
+      definirItensSelecionados([]);
       painelItems?.resetEstado();
     }
 
@@ -337,13 +580,16 @@ import * as THREE from "three";
         return;
       }
       if (!currentModel) return;
+      organizarModelosNaCena(currentModel);
       currentModel.updateMatrixWorld(true);
       const geo = analisarGeometria(currentModel);
       const caixa = new THREE.Box3().setFromObject(currentModel);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
       geo.centro = caixa.getCenter(new THREE.Vector3());
       geo.diagonal = geo.tamanho.length();
-      renderizarPainel(montarSecoesUltimo(geo));
+      enquadrarCena(currentModel, { resetView: false });
+      if (ferramentas?.getEstado?.().grade) assentarModelosNaGrade();
+      atualizarPainelInfo();
       extensoes?.onModelLoaded(currentModel, {
         ...ultimoExtras,
         bambuImpressao: ultimoExtras?.bambu?.bambuImpressao,
@@ -380,6 +626,129 @@ import * as THREE from "three";
     let ultimoArquivoMeta = null;
     let ultimoExtras = {};
 
+    function assentarModelosNaGrade() {
+      if (!currentModel) return;
+      currentModel.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(currentModel);
+      const deltaY = -box.min.y;
+      if (Math.abs(deltaY) > 1e-9) {
+        currentModel.position.y += deltaY;
+        currentModel.updateMatrixWorld(true);
+      }
+    }
+
+    function geoDeObject3d(object3d) {
+      const geo = analisarGeometria(object3d);
+      object3d.updateMatrixWorld(true);
+      const caixa = new THREE.Box3().setFromObject(object3d);
+      geo.tamanho = caixa.getSize(new THREE.Vector3());
+      geo.centro = caixa.getCenter(new THREE.Vector3());
+      geo.diagonal = geo.tamanho.length();
+      return geo;
+    }
+
+    function montarSecoesSelecao(alvos) {
+      if (alvos.length === 1) {
+        const obj = alvos[0];
+        const meta = obj.userData.arquivoMeta ?? ultimoArquivoMeta;
+        const extras = obj.userData.extras ?? ultimoExtras;
+        const formato = obj.userData.formato ?? ultimoFormato;
+        const geo = geoDeObject3d(obj);
+        const secoes = montarSecoes(meta, geo, extras);
+        const secFil = ferramentas?.getSecaoFilamentosDeObject?.(obj);
+        if (secFil) secoes.push(secFil);
+        return secoes;
+      }
+
+      const caixa = new THREE.Box3();
+      const geo = {
+        malhas: 0,
+        geometrias: 0,
+        vertices: 0,
+        triangulos: 0,
+        indexadas: 0,
+        naoIndexadas: 0,
+        comNormais: 0,
+        comUv: 0,
+        comCores: 0,
+        grupos: 0,
+        materiais: 0,
+        texturas: 0,
+        area: 0,
+        volume: 0,
+      };
+      const nomes = [];
+
+      for (const obj of alvos) {
+        obj.updateMatrixWorld(true);
+        caixa.expandByObject(obj);
+        const g = analisarGeometria(obj);
+        geo.malhas += g.malhas;
+        geo.geometrias += g.geometrias;
+        geo.vertices += g.vertices;
+        geo.triangulos += g.triangulos;
+        geo.indexadas += g.indexadas;
+        geo.naoIndexadas += g.naoIndexadas;
+        geo.comNormais += g.comNormais;
+        geo.comUv += g.comUv;
+        geo.comCores += g.comCores;
+        geo.grupos += g.grupos;
+        geo.materiais += g.materiais;
+        geo.texturas += g.texturas;
+        geo.area += g.area ?? 0;
+        geo.volume += g.volume ?? 0;
+        nomes.push(obj.name || obj.userData.arquivoMeta?.nome || "Modelo");
+      }
+
+      geo.tamanho = caixa.getSize(new THREE.Vector3());
+      geo.centro = caixa.getCenter(new THREE.Vector3());
+      geo.diagonal = geo.tamanho.length();
+
+      const meta = {
+        nome: nomes.join(", "),
+        formato: [...new Set(alvos.map((o) => o.userData.formato).filter(Boolean))].join(" + ") || ultimoFormato,
+        tamanho: "—",
+        mime: "—",
+        modificado: "—",
+        ficheiros: nomes,
+        pecas: alvos.length,
+      };
+
+      const secoes = montarSecoes(meta, geo, {});
+      secoes.unshift({
+        titulo: "Seleção",
+        itens: [["Modelos", String(alvos.length)], ["Nomes", nomes.join(", ")]],
+      });
+      return secoes;
+    }
+
+    function atualizarPainelInfo() {
+      if (!currentModel || !painelItems?.temItems()) {
+        limparPainel();
+        return;
+      }
+
+      let alvos = itensSelecionados3d.length ? [...itensSelecionados3d] : null;
+
+      if (!alvos?.length) {
+        if (temVariosModelosNaCena()) {
+          infoPanel.innerHTML =
+            '<p class="info-vazio">Selecione um modelo para ver as informações</p>';
+          return;
+        }
+        const grupos = painelItems.getGrupos?.() ?? [];
+        if (grupos.length === 1) alvos = [grupos[0].object3d];
+      }
+
+      if (!alvos?.length) {
+        infoPanel.innerHTML =
+          '<p class="info-vazio">Selecione um modelo para ver as informações</p>';
+        return;
+      }
+
+      renderizarPainel(montarSecoesSelecao(alvos));
+    }
+
     function montarSecoesUltimo(geo) {
       const secoes = montarSecoes(ultimoArquivoMeta, geo, ultimoExtras);
       if (secaoFilamentosCache) secoes.push(secaoFilamentosCache);
@@ -387,7 +756,52 @@ import * as THREE from "three";
       return secoes;
     }
 
-    function centerAndFrame(object) {
+    function disporNaHorizontal(pai) {
+      const filhos = [...pai.children];
+      if (filhos.length <= 1) return;
+
+      const medidas = filhos.map((filho) => {
+        filho.position.set(0, 0, 0);
+        filho.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(filho);
+        const center = box.getCenter(new THREE.Vector3());
+        filho.position.x -= center.x;
+        filho.position.y -= box.min.y;
+        filho.position.z -= center.z;
+        filho.updateMatrixWorld(true);
+        box.setFromObject(filho);
+        return { filho, largura: box.getSize(new THREE.Vector3()).x || 0.001 };
+      });
+
+      let cursor = 0;
+      const gap = Math.max(medidas[0]?.largura * 0.12, 0.005);
+      for (const { filho, largura } of medidas) {
+        filho.position.x += cursor + largura * 0.5;
+        cursor += largura + gap;
+      }
+
+      pai.updateMatrixWorld(true);
+      const boxPai = new THREE.Box3().setFromObject(pai);
+      const cx = (boxPai.min.x + boxPai.max.x) * 0.5;
+      const cz = (boxPai.min.z + boxPai.max.z) * 0.5;
+      filhos.forEach((f) => {
+        f.position.x -= cx;
+        f.position.z -= cz;
+      });
+    }
+
+    function organizarModelosNaCena(root) {
+      if (!root) return;
+      for (const grupo of root.children) {
+        if (grupo.children.length > 1) disporNaHorizontal(grupo);
+      }
+      if (root.children.length > 1) disporNaHorizontal(root);
+    }
+
+    function enquadrarCena(object, { resetView = true } = {}) {
+      if (!object) return;
+      organizarModelosNaCena(object);
+
       object.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(object);
       const size = box.getSize(new THREE.Vector3());
@@ -396,12 +810,23 @@ import * as THREE from "three";
 
       const maxDim = Math.max(size.x, size.y, size.z) || 1;
       minCameraDistance = maxDim * 0.12;
-      cameraDistance = maxDim * 2.2;
-      panOffset.set(0, 0, 0);
-      resetarRotacao();
-      resetOrbitFrontal();
+      camera.near = Math.max(maxDim * 0.002, 0.01);
+      camera.far = Math.max(maxDim * 200, 1000);
+      camera.updateProjectionMatrix();
+      if (resetView) {
+        cameraDistance = maxDim * 2.2;
+        panOffset.set(0, 0, 0);
+        resetarRotacao();
+        resetOrbitFrontal();
+      } else {
+        cameraDistance = Math.max(cameraDistance, maxDim * 2.2);
+      }
       updateCamera();
       ferramentas?.atualizarAuxiliaresVisuais?.();
+    }
+
+    function centerAndFrame(object) {
+      enquadrarCena(object, { resetView: true });
     }
 
     const vetorA = new THREE.Vector3();
@@ -935,9 +1360,11 @@ import * as THREE from "three";
       return clone;
     }
 
-    function salvarEstadoVisual(object) {
-      materiaisOriginais.clear();
-      meshComCorVertice.clear();
+    function salvarEstadoVisual(object, { append = false } = {}) {
+      if (!append) {
+        materiaisOriginais.clear();
+        meshComCorVertice.clear();
+      }
 
       object.traverse((child) => {
         if (!child.isMesh) return;
@@ -960,8 +1387,6 @@ import * as THREE from "three";
     }
 
     function aplicarVisual(object) {
-      const metaBambu = ultimoExtras?.bambu ?? null;
-
       object.traverse((child) => {
         if (!child.isMesh) return;
 
@@ -969,7 +1394,10 @@ import * as THREE from "three";
           const originais = materiaisOriginais.get(child.uuid);
           const clonados = originais.map((material) => {
             const mat = material.clone();
-            if (child.name?.startsWith("filament-")) mat.flatShading = false;
+            if (child.name?.startsWith("filament-")) {
+              mat.flatShading = false;
+              aplicarPolygonOffsetFilamento(mat, child.name);
+            }
             if (meshComCorVertice.has(child.uuid)) mat.vertexColors = true;
             for (const chave of ["map", "emissiveMap", "specularMap"]) {
               if (mat[chave]) mat[chave].colorSpace = THREE.SRGBColorSpace;
@@ -980,6 +1408,7 @@ import * as THREE from "three";
           return;
         }
 
+        const metaBambu = metaBambuDoObject(child);
         const matBambu = materialFilamentoBambu(child, metaBambu);
         if (matBambu) {
           child.material = matBambu;
@@ -1009,6 +1438,20 @@ import * as THREE from "three";
       return base.length > 22 ? `${base.slice(0, 20)}…` : base;
     }
 
+    function coletarCoresDoGrupo(object3d) {
+      if (!object3d) return [];
+      const grupo = painelItems?.getGrupos()?.find((g) => g.object3d === object3d);
+      if (!grupo) return [];
+      return grupo.pecas.map((peca) => {
+        const meta = metaBambuDoObject(peca.object3d);
+        return {
+          id: peca.id,
+          nome: peca.nome,
+          cores: extrairCoresDoObject(peca.object3d, meta),
+        };
+      });
+    }
+
     function coletarCoresPecas() {
       const entradas = [];
       for (const grupo of painelItems?.getGrupos() ?? []) {
@@ -1017,9 +1460,7 @@ import * as THREE from "three";
           entradas.push({
             id: peca.id,
             nome: peca.nome,
-            cores: peca.cores?.length
-              ? peca.cores
-              : extrairCoresDoObject(peca.object3d, meta),
+            cores: extrairCoresDoObject(peca.object3d, meta),
           });
         }
       }
@@ -1101,9 +1542,24 @@ import * as THREE from "three";
         limparCoresModelo();
         return;
       }
-      const entradas = coletarCoresPecas();
-      painelItems.atualizarCoresPecas(entradas);
-      renderizarPainelCores(entradas);
+      const todasEntradas = coletarCoresPecas();
+      painelItems.atualizarCoresPecas(todasEntradas);
+
+      if (temVariosModelosNaCena() && !itensSelecionados3d.length) {
+        limparCoresModelo();
+        return;
+      }
+
+      let entradasPainel;
+      if (itensSelecionados3d.length) {
+        entradasPainel = [];
+        for (const obj of itensSelecionados3d) {
+          entradasPainel.push(...coletarCoresDoGrupo(obj));
+        }
+      } else {
+        entradasPainel = todasEntradas;
+      }
+      renderizarPainelCores(entradasPainel);
     }
 
     function limparCoresModelo() {
@@ -1137,6 +1593,10 @@ import * as THREE from "three";
       ensureItemsRoot();
 
       for (const grupo of importGroups) {
+        const metaGrupo = grupo.arquivoMeta ?? arquivoMeta;
+        grupo.object3d.userData.arquivoMeta = metaGrupo;
+        grupo.object3d.userData.extras = grupo.extras ?? extras;
+        grupo.object3d.userData.formato = grupo.formato ?? ultimoFormato;
         currentModel.add(grupo.object3d);
         painelItems?.adicionarGrupo({
           nome: grupo.nome,
@@ -1145,15 +1605,37 @@ import * as THREE from "three";
         });
       }
 
-      ultimoArquivoMeta = arquivoMeta;
-      ultimoExtras = append ? { ...ultimoExtras, ...extras } : extras;
+      ultimoExtras = append
+        ? { ...ultimoExtras, ...extras, bambu: ultimoExtras?.bambu ?? extras.bambu }
+        : extras;
+      if (append && ultimoArquivoMeta && arquivoMeta) {
+        const ficheirosNovos = arquivoMeta.ficheiros || [arquivoMeta.nome];
+        ultimoArquivoMeta = {
+          ...ultimoArquivoMeta,
+          ficheiros: [...(ultimoArquivoMeta.ficheiros || [ultimoArquivoMeta.nome]), ...ficheirosNovos],
+          pecas: (ultimoArquivoMeta.pecas || 0) + (arquivoMeta.pecas || importGroups.reduce((n, g) => n + g.pecas.length, 0)),
+          tamanhoBytes: (ultimoArquivoMeta.tamanhoBytes || 0) + (arquivoMeta.tamanhoBytes || 0),
+          tamanho: formatarTamanho((ultimoArquivoMeta.tamanhoBytes || 0) + (arquivoMeta.tamanhoBytes || 0)),
+        };
+      } else if (!append) {
+        ultimoArquivoMeta = arquivoMeta;
+      }
       ultimoFormato = (arquivoMeta.formato || "STL").split(" + ")[0];
 
       const geo = analisarGeometria(currentModel);
-      salvarEstadoVisual(currentModel);
+      if (append) {
+        for (const grupo of importGroups) {
+          salvarEstadoVisual(grupo.object3d, { append: true });
+        }
+      } else {
+        salvarEstadoVisual(currentModel, { append: false });
+      }
       aplicarVisual(currentModel);
 
-      centerAndFrame(currentModel);
+      enquadrarCena(currentModel, { resetView: !append });
+      if (ferramentas?.getEstado?.().grade) {
+        assentarModelosNaGrade();
+      }
 
       const caixa = new THREE.Box3().setFromObject(currentModel);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
@@ -1167,15 +1649,22 @@ import * as THREE from "three";
         formato: ultimoFormato,
       });
 
-      const secoes = montarSecoesUltimo(geo);
-
       placeholder.classList.add("hidden");
-      renderizarPainel(secoes);
       atualizarCoresUi();
+      if (importGroups.length) {
+        painelItems?.selecionarPorObject3d?.(importGroups[importGroups.length - 1].object3d);
+      }
       ferramentas?.sincronizarCameras();
       publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile);
       setPainelPosModelo(true);
-      setStatus(`Modelo carregado: ${arquivoMeta.nome}`);
+      const totalGrupos = painelItems?.getGrupos?.().length ?? importGroups.length;
+      setStatus(
+        append
+          ? `Adicionado · ${totalGrupos} grupo(s) na cena`
+          : importGroups.length > 1 || (importGroups[0]?.pecas?.length ?? 0) > 1
+            ? `Carregados ${importGroups.reduce((n, g) => n + g.pecas.length, 0)} modelos`
+            : `Modelo carregado: ${arquivoMeta.nome}`
+      );
     }
 
     function montarPecasImportacao(object, nomeFicheiro, extras = {}) {
@@ -1191,11 +1680,12 @@ import * as THREE from "three";
       return [{ nome: nomeFicheiro, object3d: object, cores: extras.coresArquivo ?? [] }];
     }
 
-    function showModel(object, arquivoMeta, extras = {}, { append = false } = {}) {
-      const nomeFicheiro = ultimoArquivoFile?.name || arquivoMeta.nome || "Modelo";
+    function showModel(object, arquivoMeta, extras = {}, { append = false, nomeFicheiro = null } = {}) {
+      const nome = nomeFicheiro || arquivoMeta?.nome || "Modelo";
+      const nomeExibicao = nomeBaseArquivo({ name: nome });
       const importGroup = new THREE.Group();
-      importGroup.name = nomeGrupoImportacao([nomeFicheiro]);
-      object.name = nomeBaseArquivo({ name: nomeFicheiro });
+      importGroup.name = nomeExibicao;
+      object.name = nomeExibicao;
       importGroup.add(object);
       if (extras.bambu) object.userData.bambuExtras = extras.bambu;
       if (Array.isArray(extras.coresArquivo)) object.userData.coresArquivo = extras.coresArquivo;
@@ -1203,9 +1693,12 @@ import * as THREE from "three";
       apresentarImportacao({
         importGroups: [
           {
-            nome: importGroup.name,
+            nome: nomeExibicao,
             object3d: importGroup,
-            pecas: montarPecasImportacao(object, nomeFicheiro, extras),
+            pecas: montarPecasImportacao(object, nome, extras),
+            arquivoMeta,
+            extras,
+            formato: (arquivoMeta?.formato || "STL").split(" + ")[0],
           },
         ],
         arquivoMeta,
@@ -1282,7 +1775,8 @@ import * as THREE from "three";
       return { wrapped, extras, ext, arquivo };
     }
 
-    async function loadVariosArquivos(arquivos, { append = false } = {}) {
+    async function loadVariosArquivos(arquivos, { append } = {}) {
+      const acumular = resolverModoAppend(append);
       ferramentas?.setLoading(true, `Carregando ${arquivos.length} ficheiros…`);
       setStatus(`Carregando ${arquivos.length} ficheiros…`);
 
@@ -1293,9 +1787,26 @@ import * as THREE from "three";
           arquivos.map((arquivo) => carregarFicheiroComoPeca(arquivo, arquivos))
         );
 
+        const importGroups = await Promise.all(
+          carregados.map(async (item) => {
+            const nomeExibicao = nomeBaseArquivo(item.arquivo);
+            const meta = await lerMetadadosArquivo(item.arquivo, item.ext);
+            const grupo = new THREE.Group();
+            grupo.name = nomeExibicao;
+            grupo.add(item.wrapped);
+            return {
+              nome: nomeExibicao,
+              object3d: grupo,
+              pecas: montarPecasImportacao(item.wrapped, item.arquivo.name, item.extras),
+              arquivoMeta: meta,
+              extras: item.extras,
+              formato: item.ext.toUpperCase(),
+            };
+          })
+        );
+
         const mergedExtras = { multiArquivos: true };
         for (const item of carregados) {
-          if (item.extras.bambu) mergedExtras.bambu = item.extras.bambu;
           if (item.extras.gltf) mergedExtras.gltf = item.extras.gltf;
           if (item.extras.fbxUrls) {
             fbxUrlsAtivas = item.extras.fbxUrls;
@@ -1303,44 +1814,21 @@ import * as THREE from "three";
           }
         }
 
-        const importGroup = new THREE.Group();
-        importGroup.name = nomeGrupoImportacao(arquivos.map((a) => a.name));
-
-        const pecas = carregados.map((item) => {
-          importGroup.add(item.wrapped);
-          return {
-            nome: item.arquivo.name,
-            object3d: item.wrapped,
-            cores: item.extras.coresArquivo ?? [],
-          };
-        });
-
-        if (append) {
+        if (acumular) {
           ultimoArquivosImportados = [...(ultimoArquivosImportados || []), ...arquivos];
-          if (ultimoArquivoMeta) {
-            ultimoArquivoMeta = {
-              ...ultimoArquivoMeta,
-              ficheiros: [...(ultimoArquivoMeta.ficheiros || []), ...arquivos.map((a) => a.name)],
-              pecas: (ultimoArquivoMeta.pecas || 0) + arquivos.length,
-            };
-          }
         } else {
           ultimoArquivoFile = arquivos[0];
           ultimoArquivosImportados = arquivos;
         }
 
-        const arquivoMeta = append && ultimoArquivoMeta
-          ? ultimoArquivoMeta
-          : await lerMetadadosVariosArquivos(arquivos);
+        const arquivoMeta = await lerMetadadosVariosArquivos(arquivos);
 
         apresentarImportacao({
-          importGroups: [{ nome: importGroup.name, object3d: importGroup, pecas }],
+          importGroups,
           arquivoMeta,
           extras: mergedExtras,
-          append,
+          append: acumular,
         });
-
-        setStatus(`Carregados ${arquivos.length} ficheiros em «${importGroup.name}»`);
       } catch (err) {
         setStatus(`Erro: ${err.message}`, true);
       } finally {
@@ -1352,25 +1840,30 @@ import * as THREE from "three";
       return loadVariosArquivos(arquivos);
     }
 
-    async function loadFile(file, arquivosRelacionados = [], { append = false } = {}) {
+    async function loadFile(file, arquivosRelacionados = [], { append } = {}) {
+      const acumular = resolverModoAppend(append);
       const ext = file.name.split(".").pop().toLowerCase();
       ferramentas?.setLoading(true, `Carregando ${file.name}...`);
       setStatus(`Carregando ${file.name}...`);
 
       try {
         const arquivoMeta = await lerMetadadosArquivo(file, ext);
-        if (!append) {
+        if (!acumular) {
           ultimoArquivoFile = file;
           ultimoArquivosImportados = [file];
         } else {
           ultimoArquivosImportados = [...(ultimoArquivosImportados || []), file];
+          ultimoArquivoFile = file;
         }
         revogarUrlsFbx(fbxUrlsAtivas);
 
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
         if (extras.fbxUrls) fbxUrlsAtivas = extras.fbxUrls;
 
-        showModel(criarContainerModelo(object, ext), arquivoMeta, extras, { append });
+        showModel(criarContainerModelo(object, ext), arquivoMeta, extras, {
+          append: acumular,
+          nomeFicheiro: file.name,
+        });
       } catch (err) {
         setStatus(`Erro: ${err.message}`, true);
       } finally {
@@ -1390,29 +1883,42 @@ import * as THREE from "three";
     initPainelExpanders();
     montarControlesViewport(document.querySelector(".viewer"));
 
-    function processarFicheirosSelecionados(arquivos, { append = false } = {}) {
+    function temModelosNaCena() {
+      return Boolean(painelItems?.temItems?.());
+    }
+
+    /** Por defeito acumula na cena; só substitui se append === false explicitamente. */
+    function resolverModoAppend(append) {
+      if (append === false) return false;
+      if (append === true) return true;
+      return temModelosNaCena();
+    }
+
+    function processarFicheirosSelecionados(arquivos, { append } = {}) {
+      const acumular = resolverModoAppend(append);
       const fbx = arquivos.find((f) => f.name.toLowerCase().endsWith(".fbx"));
       if (fbx) {
-        loadFile(fbx, arquivos, { append });
+        loadFile(fbx, arquivos, { append: acumular });
         return;
       }
 
       const zip = arquivos.find((f) => f.name.toLowerCase().endsWith(".zip"));
       if (zip) {
-        loadFile(zip, arquivos, { append });
+        loadFile(zip, arquivos, { append: acumular });
         return;
       }
 
       if (isLoteSuportado(arquivos)) {
-        loadVariosArquivos(arquivos, { append });
+        loadVariosArquivos(arquivos, { append: acumular });
         return;
       }
 
-      loadFile(arquivos[0], arquivos, { append });
+      loadFile(arquivos[0], arquivos, { append: acumular });
     }
 
     painelItems = initPainelItems({
       setStatus,
+      temModelosNaCena,
       onFicheirosSelecionados: processarFicheirosSelecionados,
       onItemsAlterados: () => sincronizarAposItemsAlterados(),
       onVisibilidadeAlterada: () => {
@@ -1422,8 +1928,52 @@ import * as THREE from "three";
         ferramentas?.aplicarFiltroCor(hex);
         setStatus(`Cor selecionada: ${hex}`);
       },
+      onSelecaoAlterada: (grupos) => {
+        if (!grupos?.length) {
+          definirItensSelecionados([]);
+          return;
+        }
+        definirItensSelecionados(grupos.map((g) => g.object3d));
+      },
     });
     painelItems.bindUi();
+
+    function initImportacaoPorArrastar() {
+      const viewer = document.querySelector(".viewer");
+      const marcarArrasto = (ativo) => viewer?.classList.toggle("viewer-drag-over", ativo);
+
+      const evitarDefault = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      viewer?.addEventListener("dragenter", (event) => {
+        evitarDefault(event);
+        marcarArrasto(true);
+      });
+      viewer?.addEventListener("dragover", evitarDefault);
+      viewer?.addEventListener("dragleave", (event) => {
+        if (!viewer.contains(event.relatedTarget)) marcarArrasto(false);
+      });
+      viewer?.addEventListener("drop", (event) => {
+        evitarDefault(event);
+        marcarArrasto(false);
+        const ficheiros = Array.from(event.dataTransfer?.files || []);
+        if (!ficheiros.length) return;
+        processarFicheirosSelecionados(ficheiros);
+      });
+
+      placeholder?.addEventListener("click", () => {
+        painelItems?.abrirSeletorFicheiros?.();
+      });
+      placeholder?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          placeholder.click();
+        }
+      });
+    }
+    initImportacaoPorArrastar();
 
     function atualizarSecaoFilamentos() {
       if (!currentModel || !ultimoArquivoMeta || !ferramentas) return;
@@ -1431,7 +1981,7 @@ import * as THREE from "three";
       const caixa = new THREE.Box3().setFromObject(currentModel);
       geo.tamanho = caixa.getSize(new THREE.Vector3());
       secaoFilamentosCache = ferramentas.getSecaoFilamentos();
-      renderizarPainel(montarSecoesUltimo(geo));
+      atualizarPainelInfo();
     }
 
     document.getElementById("chk-cores")?.addEventListener("change", (e) => {
@@ -1459,6 +2009,10 @@ import * as THREE from "three";
       container,
       canvas,
       getCurrentModel: () => currentModel,
+      getItensSelecionados3d: () => itensSelecionados3d,
+      getGruposItems: () => painelItems?.getGrupos?.() ?? [],
+      temVariosModelosNaCena,
+      assentarModelosNaGrade,
       getCameraDistance: () => cameraDistance,
       setCameraDistance: (v) => {
         cameraDistance = v;
@@ -1471,6 +2025,7 @@ import * as THREE from "three";
       aplicarRotacao,
       resetarRotacao,
       getOrbitTheta: () => orbit.theta,
+      getVelocidadeRotacao: velocidadeOrbita,
       setOrbitTheta: (v) => {
         orbit.theta = v;
         updateCamera();
@@ -1491,6 +2046,10 @@ import * as THREE from "three";
       formatarDistancia,
       analisarGeometria,
       getFormato: () => ultimoFormato,
+      getBgIndex: () => bgIndex,
+      setBackgroundColor: (hex) => {
+        scene.background = new THREE.Color(hex);
+      },
       aplicarPreferenciaCores: (valor) => {
         usarCores = valor;
         if (currentModel) aplicarVisual(currentModel);
@@ -1536,7 +2095,7 @@ import * as THREE from "three";
         updateCamera,
       }),
       refreshModelVisual: (model) => {
-        salvarEstadoVisual(model);
+        salvarEstadoVisual(model, { append: true });
         aplicarVisual(model);
         atualizarCoresUi();
       },
@@ -1551,6 +2110,8 @@ import * as THREE from "three";
       renderer,
       scene,
       getCamera: () => ferramentas?.cameraAtiva?.() ?? camera,
+      prepararCaptura: () => ferramentas?.prepararCaptura?.(),
+      isCenarioAtivo: () => ferramentas?.isCenarioAtivo?.() ?? false,
       getModelFile: () => ultimoArquivoFile,
       getModelFiles: () => ultimoArquivosImportados,
       hasModel: () => Boolean(currentModel && ultimoArquivoFile),

@@ -1,17 +1,26 @@
 /**
- * Exportação PNG (fundo transparente) e vídeo de giro (WebM).
+ * Exportação PNG (fundo transparente ou estúdio) e vídeo de giro (WebM).
  */
 import * as THREE from "three";
 
-export function capturarPngBlob(renderer, scene, camera, { transparent = false } = {}) {
+function baixarDataUrl(dataUrl, nome) {
+  const link = document.createElement("a");
+  link.download = nome;
+  link.href = dataUrl;
+  link.click();
+}
+
+export function capturarPngBlob(renderer, scene, camera, { transparent = false, cenarioAtivo = false } = {}) {
   const prevAlpha = renderer.getClearAlpha();
   const prevCor = renderer.getClearColor(new THREE.Color());
   const prevFundo = scene.background;
 
-  if (transparent) {
+  const fundoTransparente = transparent && !cenarioAtivo;
+  if (fundoTransparente) {
     renderer.setClearColor(0x000000, 0);
     scene.background = null;
   }
+
   renderer.render(scene, camera);
 
   return new Promise((resolve, reject) => {
@@ -21,15 +30,26 @@ export function capturarPngBlob(renderer, scene, camera, { transparent = false }
         scene.background = prevFundo;
         renderer.render(scene, camera);
         if (blob) resolve(blob);
-        else reject(new Error('Não foi possível gerar a imagem'));
+        else reject(new Error("Não foi possível gerar a imagem"));
       },
-      'image/png',
+      "image/png",
       0.92
     );
   });
 }
 
-export function capturarPngTransparente(renderer, scene, camera) {
+export function capturarTelaPng(renderer, scene, camera) {
+  renderer.render(scene, camera);
+  return renderer.domElement.toDataURL("image/png");
+}
+
+export function capturarPngTransparente(renderer, scene, camera, { cenarioAtivo = false } = {}) {
+  if (cenarioAtivo) {
+    renderer.render(scene, camera);
+    baixarDataUrl(renderer.domElement.toDataURL("image/png"), `estudio-${Date.now()}.png`);
+    return;
+  }
+
   const prevAlpha = renderer.getClearAlpha();
   const prevCor = renderer.getClearColor(new THREE.Color());
   const prevFundo = scene.background;
@@ -38,16 +58,11 @@ export function capturarPngTransparente(renderer, scene, camera) {
   scene.background = null;
   renderer.render(scene, camera);
 
-  const dataUrl = renderer.domElement.toDataURL("image/png");
+  baixarDataUrl(renderer.domElement.toDataURL("image/png"), `modelo-${Date.now()}.png`);
 
   renderer.setClearColor(prevCor, prevAlpha);
   scene.background = prevFundo;
   renderer.render(scene, camera);
-
-  const link = document.createElement("a");
-  link.download = `modelo-${Date.now()}.png`;
-  link.href = dataUrl;
-  link.click();
 }
 
 export async function exportarGifGiro({
@@ -57,6 +72,7 @@ export async function exportarGifGiro({
   modelPivot,
   frames = 48,
   onProgress,
+  onBeforeFrame,
   orbit,
 }) {
   const canvas = renderer.domElement;
@@ -83,8 +99,11 @@ export async function exportarGifGiro({
     recorder.onstop = () => resolve(new Blob(chunks, { type: mime }));
   });
 
-  recorder.start();
   const passo = (Math.PI * 2) / frames;
+
+  onBeforeFrame?.(0);
+  renderer.render(scene, camera);
+  recorder.start();
 
   for (let i = 0; i <= frames; i++) {
     if (usarOrbita) {
@@ -96,6 +115,7 @@ export async function exportarGifGiro({
         new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), passo * i)
       );
     }
+    onBeforeFrame?.(i);
     renderer.render(scene, camera);
     onProgress?.(i, frames);
     await new Promise((r) => setTimeout(r, 80));
@@ -110,6 +130,7 @@ export async function exportarGifGiro({
   } else if (modelPivot && qOriginal) {
     modelPivot.quaternion.copy(qOriginal);
   }
+  onBeforeFrame?.(frames);
   renderer.render(scene, camera);
 
   const link = document.createElement("a");

@@ -36,6 +36,8 @@ export function initPublicarProduto({
   renderer,
   scene,
   getCamera,
+  prepararCaptura,
+  isCenarioAtivo,
   getModelFile,
   hasModel,
   setStatus,
@@ -166,7 +168,10 @@ export function initPublicarProduto({
       const row = productToRow(draft);
       const ext = extensaoModelo(file);
 
-      const previewBlob = await capturarPngBlob(renderer, scene, getCamera());
+      prepararCaptura?.();
+      const previewBlob = await capturarPngBlob(renderer, scene, getCamera(), {
+        cenarioAtivo: isCenarioAtivo?.() ?? false,
+      });
       const previewFile = new File([previewBlob], 'preview.png', { type: 'image/png' });
       const previewUrl = await uploadProductAsset(supabase, previewFile, row);
 

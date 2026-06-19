@@ -152,6 +152,15 @@ export function metaBambuDoObject(object3d) {
 }
 
 /** Material Bambu por slot de filamento (paint_color / AMS). */
+export function aplicarPolygonOffsetFilamento(material, meshName) {
+  if (!material || !meshName?.startsWith("filament-")) return material;
+  const slot = parseInt(meshName.replace("filament-", ""), 10) || 1;
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = -slot;
+  material.polygonOffsetUnits = -slot;
+  return material;
+}
+
 export function materialFilamentoBambu(mesh, metaBambu) {
   if (!mesh?.isMesh || !mesh.name?.startsWith("filament-") || !metaBambu?.filamentColours) {
     return null;
@@ -160,8 +169,13 @@ export function materialFilamentoBambu(mesh, metaBambu) {
   const hex = normalizarHexCor(metaBambu.filamentColours[slot - 1]);
   if (!hex) return null;
 
-  return new THREE.MeshPhongMaterial({
-    color: new THREE.Color(hex),
-    flatShading: false,
-  });
+  return aplicarPolygonOffsetFilamento(
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color(hex),
+      roughness: 0.58,
+      metalness: 0.04,
+      flatShading: false,
+    }),
+    mesh.name
+  );
 }

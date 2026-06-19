@@ -48,7 +48,7 @@ function definirVisibilidade(object3d, visivel) {
 export function initPainelItems(app) {
   const estado = {
     grupos: [],
-    selecionadoId: null,
+    selecionadosIds: new Set(),
   };
 
   let container = null;
@@ -63,9 +63,49 @@ export function initPainelItems(app) {
     return null;
   }
 
-  function selecionar(id) {
-    estado.selecionadoId = id;
+  function idGrupoDeNo(id) {
+    const no = encontrarNo(id);
+    return no?.grupo?.id ?? null;
+  }
+
+  function getGruposSelecionados() {
+    return estado.grupos.filter((g) => estado.selecionadosIds.has(g.id));
+  }
+
+  function emitirSelecao() {
+    app.onSelecaoAlterada?.(getGruposSelecionados());
+  }
+
+  function selecionar(id, { ctrlKey = false } = {}) {
+    const grupoId = idGrupoDeNo(id);
+    if (!grupoId) return;
+
+    if (ctrlKey) {
+      if (estado.selecionadosIds.has(grupoId)) {
+        estado.selecionadosIds.delete(grupoId);
+      } else {
+        estado.selecionadosIds.add(grupoId);
+      }
+    } else {
+      estado.selecionadosIds.clear();
+      estado.selecionadosIds.add(grupoId);
+    }
+
     render();
+    emitirSelecao();
+  }
+
+  function selecionarPorObject3d(object3d, { ctrlKey = false } = {}) {
+    const grupo = estado.grupos.find((g) => g.object3d === object3d);
+    if (!grupo) return;
+    selecionar(grupo.id, { ctrlKey });
+  }
+
+  function limparSelecao() {
+    if (!estado.selecionadosIds.size) return;
+    estado.selecionadosIds.clear();
+    render();
+    emitirSelecao();
   }
 
   function alternarGrupo(id) {
@@ -93,32 +133,24 @@ export function initPainelItems(app) {
   }
 
   function removerSelecionados() {
-    if (!estado.selecionadoId) {
+    if (!estado.selecionadosIds.size) {
       app.setStatus?.('Selecione um item para remover', true);
       return;
     }
 
-    const no = encontrarNo(estado.selecionadoId);
-    if (!no) return;
-
-    if (no.tipo === 'peca') {
-      no.peca.object3d.parent?.remove(no.peca.object3d);
-      no.peca.object3d.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach((m) => m?.dispose());
-        }
-      });
-      no.grupo.pecas = no.grupo.pecas.filter((p) => p.id !== no.peca.id);
-      if (!no.grupo.pecas.length) removerGrupo(no.grupo.id);
-    } else {
-      removerGrupo(no.grupo.id);
+    const ids = [...estado.selecionadosIds];
+    for (const id of ids) {
+      const no = encontrarNo(id);
+      if (!no) continue;
+      if (no.tipo === 'grupo') {
+        removerGrupo(no.grupo.id);
+      }
     }
 
-    estado.selecionadoId = null;
+    estado.selecionadosIds.clear();
     app.onItemsAlterados?.();
     render();
+    emitirSelecao();
   }
 
   function removerGrupo(grupoId) {
@@ -148,23 +180,52 @@ export function initPainelItems(app) {
     .join("")}</span>`;
 }
 
-function render() {
+  const ALTURA_LINHA = 28;
+  const PADDING_ARVORE = 8;
+
+  function contarLinhasVisiveis() {
+    let linhas = 0;
+    for (const grupo of estado.grupos) {
+      linhas += 1;
+      if (grupo.expandido !== false) linhas += grupo.pecas.length;
+    }
+    return linhas;
+  }
+
+  function atualizarAlturaArvore() {
+    if (!container) return;
+
+    const linhas = contarLinhasVisiveis();
+    if (!linhas) {
+      container.style.maxHeight = '';
+      container.style.overflowY = '';
+      return;
+    }
+
+    const alturaConteudo = linhas * ALTURA_LINHA + PADDING_ARVORE;
+    const teto = Math.max(160, Math.floor(window.innerHeight * 0.5));
+    container.style.maxHeight = `${Math.min(alturaConteudo, teto)}px`;
+    container.style.overflowY = alturaConteudo > teto ? 'auto' : '';
+  }
+
+  function render() {
     if (!container) return;
 
     if (!estado.grupos.length) {
       container.innerHTML = '<p class="painel-items-vazio">Nenhum item</p>';
+      atualizarAlturaArvore();
       return;
     }
 
     container.innerHTML = estado.grupos
       .map((grupo) => {
         const exp = grupo.expandido !== false;
-        const selGrupo = estado.selecionadoId === grupo.id;
+        const selGrupo = estado.selecionadosIds.has(grupo.id);
         const olhoGrupo = grupo.visivel ? 'fa-eye' : 'fa-eye-slash';
 
         const filhos = grupo.pecas
           .map((peca) => {
-            const sel = estado.selecionadoId === peca.id;
+            const sel = estado.selecionadosIds.has(grupo.id);
             const olho = peca.visivel ? 'fa-eye' : 'fa-eye-slash';
             return `
               <div class="painel-items-linha painel-items-linha--filho${sel ? ' is-selecionado' : ''}" data-id="${peca.id}" data-tipo="peca">
@@ -208,7 +269,9 @@ function render() {
     });
 
     container.querySelectorAll('.painel-items-linha[data-id]').forEach((linha) => {
-      linha.addEventListener('click', () => selecionar(linha.dataset.id));
+      linha.addEventListener('click', (event) => {
+        selecionar(linha.dataset.id, { ctrlKey: event.ctrlKey || event.metaKey });
+      });
     });
 
     container.querySelectorAll('.painel-items-cor').forEach((sw) => {
@@ -217,6 +280,8 @@ function render() {
         app.onCorClicada?.(sw.dataset.hex);
       });
     });
+
+    atualizarAlturaArvore();
   }
 
   function atualizarCoresPecas(entradas) {
@@ -248,21 +313,20 @@ function render() {
       })),
     };
     estado.grupos.push(grupo);
-    estado.selecionadoId = grupo.pecas[0]?.id ?? grupo.id;
     render();
     return grupo;
   }
 
   function limpar() {
     for (const g of [...estado.grupos]) removerGrupo(g.id);
-    estado.selecionadoId = null;
+    estado.selecionadosIds.clear();
     render();
   }
 
   /** Limpa só o estado UI (a cena já foi libertada noutro sítio). */
   function resetEstado() {
     estado.grupos = [];
-    estado.selecionadoId = null;
+    estado.selecionadosIds.clear();
     render();
   }
 
@@ -275,9 +339,19 @@ function render() {
     fileInput = document.getElementById('items-file-input');
     let modoAppend = false;
 
-    document.getElementById('items-btn-abrir')?.addEventListener('click', () => {
-      modoAppend = false;
+    function abrirSeletorFicheiros({ append } = {}) {
+      if (append === false) {
+        modoAppend = false;
+      } else if (append === true) {
+        modoAppend = true;
+      } else {
+        modoAppend = app.temModelosNaCena?.() ?? estado.grupos.length > 0;
+      }
       fileInput?.click();
+    }
+
+    document.getElementById('items-btn-abrir')?.addEventListener('click', (event) => {
+      abrirSeletorFicheiros({ append: event.shiftKey ? false : undefined });
     });
 
     document.getElementById('items-btn-remover')?.addEventListener('click', () => {
@@ -285,8 +359,7 @@ function render() {
     });
 
     document.getElementById('items-btn-adicionar')?.addEventListener('click', () => {
-      modoAppend = true;
-      fileInput?.click();
+      abrirSeletorFicheiros({ append: true });
     });
 
     fileInput?.addEventListener('change', (e) => {
@@ -296,10 +369,22 @@ function render() {
         app.onFicheirosSelecionados?.(ficheiros, { append: modoAppend });
       }
     });
+
+    window.addEventListener('resize', atualizarAlturaArvore);
+
+    return { abrirSeletorFicheiros };
+  }
+
+  let abrirSeletorFicheiros = null;
+
+  function bindUiWrapper() {
+    const ui = bindUi();
+    abrirSeletorFicheiros = ui.abrirSeletorFicheiros;
   }
 
   return {
-    bindUi,
+    bindUi: bindUiWrapper,
+    abrirSeletorFicheiros: (...args) => abrirSeletorFicheiros?.(...args),
     adicionarGrupo,
     limpar,
     resetEstado,
@@ -307,6 +392,9 @@ function render() {
     render,
     atualizarCoresPecas,
     getGrupos: () => estado.grupos,
+    getGruposSelecionados,
     selecionar,
+    selecionarPorObject3d,
+    limparSelecao,
   };
 }

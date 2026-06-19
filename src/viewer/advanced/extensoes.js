@@ -147,13 +147,20 @@ export function initExtensoes(app) {
     aplicarTema(localStorage.getItem("visualizador3d-tema") || "escuro");
 
     document.getElementById("btn-png-alpha")?.addEventListener("click", () => {
-      const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
-      capturarPngTransparente(app.renderer, app.scene, cam);
-      app.setStatus("PNG com fundo transparente salvo");
+      const ferr = app.getFerramentas?.();
+      const cam = ferr?.cameraAtiva?.() ?? app.camera;
+      const cenarioAtivo = ferr?.isCenarioAtivo?.() ?? false;
+      ferr?.prepararCaptura?.();
+      capturarPngTransparente(app.renderer, app.scene, cam, { cenarioAtivo });
+      app.setStatus(
+        cenarioAtivo ? "PNG do estúdio salvo" : "PNG com fundo transparente salvo"
+      );
     });
 
     document.getElementById("btn-gif-giro")?.addEventListener("click", async () => {
-      const cam = app.getFerramentas?.()?.cameraAtiva?.() ?? app.camera;
+      const ferr = app.getFerramentas?.();
+      const cam = ferr?.cameraAtiva?.() ?? app.camera;
+      const cenarioAtivo = ferr?.isCenarioAtivo?.() ?? false;
       app.setStatus("Gerando vídeo...");
       try {
         await exportarGifGiro({
@@ -162,9 +169,10 @@ export function initExtensoes(app) {
           camera: cam,
           modelPivot: app.modelPivot,
           orbit: app.getOrbitControl?.(),
+          onBeforeFrame: () => ferr?.prepararCaptura?.(),
           onProgress: (a, b) => app.setStatus(`Vídeo: quadro ${a}/${b}`),
         });
-        app.setStatus("Vídeo WebM salvo");
+        app.setStatus(cenarioAtivo ? "Vídeo do estúdio salvo" : "Vídeo WebM salvo");
       } catch (err) {
         app.setStatus(`Vídeo: ${err.message}`, true);
       }

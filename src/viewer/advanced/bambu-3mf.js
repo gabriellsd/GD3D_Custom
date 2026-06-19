@@ -81,8 +81,16 @@ function parseJsonArrayCampo(projectSettings, campo) {
   return [...bloco[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).filter(Boolean);
 }
 
+function metaBambuDaMalha(mesh) {
+  let node = mesh;
+  while (node) {
+    if (node.userData?.bambuExtras) return node.userData.bambuExtras;
+    node = node.parent;
+  }
+  return null;
+}
+
 export function analisarFilamentosBambu(object, meta = null) {
-  const tipos = meta?.filamentTypes ?? [];
   const slots = [];
   object.traverse((child) => {
     if (!child.isMesh || !child.name?.startsWith("filament-")) return;
@@ -97,6 +105,8 @@ export function analisarFilamentosBambu(object, meta = null) {
     const hex = child.material?.color
       ? `#${child.material.color.getHexString()}`.toUpperCase()
       : "#CCCCCC";
+    const meshMeta = metaBambuDaMalha(child) ?? meta;
+    const tipos = meshMeta?.filamentTypes ?? [];
     const nome = tipos[slot - 1] || null;
     slots.push({ slot, hex, triangles: Math.round(triangles), nome });
   });
@@ -264,6 +274,9 @@ function buildColoredGroup(objectXml, filamentColours, defaultExtruder) {
     const material = new THREE.MeshPhongMaterial({
       color: new THREE.Color(colorHex),
       flatShading: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -slot,
+      polygonOffsetUnits: -slot,
     });
 
     const mesh = new THREE.Mesh(geometry, material);

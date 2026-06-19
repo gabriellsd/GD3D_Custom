@@ -7,6 +7,7 @@ import {
   aplicarVisibilidadeSuportes,
   modeloTemSuportesBambu,
 } from "./bambu-3mf.js";
+import { criarCenarioShowcase } from "./cenario-showcase.js";
 
 const CHAVE_PREFS = "visualizador3d-prefs";
 const PREFS_PADRAO = {
@@ -19,6 +20,7 @@ const PREFS_PADRAO = {
   grade: false,
   eixos: false,
   medidas: false,
+  cenarioMesa: false,
   luz: 1.1,
   bgIndex: 0,
 };
@@ -47,9 +49,11 @@ export function initFerramentas(app) {
     grade: false,
     eixos: false,
     medidas: false,
+    cenarioMesa: false,
   };
 
   let bboxHelper = null;
+  let cenario = null;
   let gradeHelper = null;
   let axesHelper = null;
   let medidasOverlay = null;
@@ -133,9 +137,11 @@ export function initFerramentas(app) {
 
   function atualizarGrade() {
     removerGrade();
-    if (!estado.grade || !app.getCurrentModel()) return;
+    if (!estado.grade || !app.getCurrentModel() || estado.cenarioMesa) return;
 
-    const box = new THREE.Box3().setFromObject(app.modelPivot);
+    app.assentarModelosNaGrade?.();
+
+    const box = new THREE.Box3().setFromObject(app.getCurrentModel());
     const size = box.getSize(new THREE.Vector3());
     const cell = app.unidadeParaCena(0.01);
     const span = Math.max(size.x, size.z, cell * 4) * 1.4;
@@ -145,7 +151,7 @@ export function initFerramentas(app) {
     gradeHelper = new THREE.GridHelper(gridSize, divisions, 0x585b70, 0x313244);
     gradeHelper.position.set(
       (box.min.x + box.max.x) * 0.5,
-      box.min.y,
+      0,
       (box.min.z + box.max.z) * 0.5
     );
     app.scene.add(gradeHelper);
@@ -170,18 +176,58 @@ export function initFerramentas(app) {
     app.scene.add(axesHelper);
   }
 
-  function resumoMedidasModelo() {
+  function alvosMedidas() {
+    const sel = app.getItensSelecionados3d?.() ?? [];
+    if (sel.length) return sel;
     const model = app.getCurrentModel();
-    if (!model || !app.analisarGeometria || !app.converterMedidas || !app.getFormato) {
+    if (!model || app.temVariosModelosNaCena?.()) return [];
+    const grupos = app.getGruposItems?.() ?? [];
+    if (grupos.length === 1) return [grupos[0].object3d];
+    return model.children.length === 1 ? [model.children[0]] : [];
+  }
+
+  function resumoMedidasModelo() {
+    const alvos = alvosMedidas();
+    if (!alvos.length || !app.analisarGeometria || !app.converterMedidas || !app.getFormato) {
       return null;
     }
-    const geo = app.analisarGeometria(model);
-    const conv = app.converterMedidas(geo, app.getFormato());
+
+    const caixa = new THREE.Box3();
+    const geoAcum = {
+      malhas: 0,
+      geometrias: 0,
+      vertices: 0,
+      triangulos: 0,
+      volume: 0,
+      tamanho: new THREE.Vector3(),
+      centro: new THREE.Vector3(),
+      diagonal: 0,
+    };
+
+    for (const obj of alvos) {
+      obj.updateMatrixWorld(true);
+      caixa.expandByObject(obj);
+      const geo = app.analisarGeometria(obj);
+      geoAcum.malhas += geo.malhas;
+      geoAcum.geometrias += geo.geometrias;
+      geoAcum.vertices += geo.vertices;
+      geoAcum.triangulos += geo.triangulos;
+      geoAcum.volume += geo.volume ?? 0;
+    }
+
+    geoAcum.tamanho = caixa.getSize(new THREE.Vector3());
+    geoAcum.centro = caixa.getCenter(new THREE.Vector3());
+    geoAcum.diagonal = geoAcum.tamanho.length();
+
+    const formato = alvos[0].userData.formato ?? app.getFormato();
+    const conv = app.converterMedidas(geoAcum, formato);
     const mm = (v) => Math.round(v * 1000);
     const dim = `${mm(conv.tamanhoM.x)} × ${mm(conv.tamanhoM.y)} × ${mm(conv.tamanhoM.z)} mm`;
-    const vol = app.formatarVolume?.(conv.volumeM3, conv.unidade) ?? "";
-    const tris = geo.triangulos.toLocaleString("pt-BR");
-    return { dim, vol, tris };
+    const vol = conv.volumeM3 > 0 ? app.formatarVolume?.(conv.volumeM3, conv.unidade) ?? "" : "";
+    const tris = geoAcum.triangulos.toLocaleString("pt-BR");
+    const rotulo =
+      alvos.length > 1 ? `${alvos.length} modelos · ${dim}` : dim;
+    return { dim: rotulo, vol, tris };
   }
 
   function atualizarMedidasOverlay() {
@@ -192,7 +238,7 @@ export function initFerramentas(app) {
       document.querySelector(".viewer")?.appendChild(medidasOverlay);
     }
 
-    if (!estado.medidas || !app.getCurrentModel()) {
+    if (!alvosMedidas().length) {
       medidasOverlay.classList.add("hidden");
       return;
     }
@@ -205,7 +251,7 @@ export function initFerramentas(app) {
 
     medidasOverlay.innerHTML = `
       <strong>${resumo.dim}</strong>
-      <span>${resumo.vol}</span>
+      ${resumo.vol ? `<span>${resumo.vol}</span>` : ""}
       <span>${resumo.tris} triângulos</span>`;
     medidasOverlay.classList.remove("hidden");
   }
@@ -214,6 +260,7 @@ export function initFerramentas(app) {
     atualizarGrade();
     atualizarEixos();
     atualizarMedidasOverlay();
+    cenario?.atualizar();
   }
 
   async function copiarMedidasModelo() {
@@ -239,6 +286,10 @@ export function initFerramentas(app) {
   function limparAuxiliaresVisuais() {
     removerGrade();
     removerEixos();
+    cenario?.setAtivo(false);
+    estado.cenarioMesa = false;
+    const chkCenario = document.getElementById("chk-cenario-mesa");
+    if (chkCenario) chkCenario.checked = false;
     if (medidasOverlay) {
       medidasOverlay.classList.add("hidden");
     }
@@ -370,6 +421,23 @@ export function initFerramentas(app) {
     return `Filamento ${f.slot} (${f.hex})`;
   }
 
+  function montarSecaoFilamentosDeObject(object) {
+    const bambu = object?.userData?.bambuExtras ?? object?.userData?.extras?.bambu;
+    const filamentos = analisarFilamentosBambu(object, bambu);
+    if (!filamentos.length) return null;
+
+    const totalTris = filamentos.reduce((s, f) => s + f.triangles, 0);
+    const itens = filamentos.map((f) => {
+      const pct = totalTris ? ((f.triangles / totalTris) * 100).toFixed(1) : "0";
+      return [
+        rotuloFilamento(f),
+        `${pct}% · ${f.triangles.toLocaleString("pt-BR")} triângulos`,
+      ];
+    });
+
+    return { titulo: "Filamentos", itens };
+  }
+
   function montarSecaoFilamentos() {
     if (!estado.filamentos.length) return null;
 
@@ -444,7 +512,7 @@ export function initFerramentas(app) {
     chk("chk-suportes", prefs.suportes);
     chk("chk-grade", prefs.grade);
     chk("chk-eixos", prefs.eixos);
-    chk("chk-medidas", prefs.medidas);
+    chk("chk-cenario-mesa", prefs.cenarioMesa);
 
     const sliderLuz = document.getElementById("slider-luz");
     if (sliderLuz) sliderLuz.value = prefs.luz;
@@ -458,7 +526,7 @@ export function initFerramentas(app) {
     dispararChange("chk-regua");
     dispararChange("chk-grade");
     dispararChange("chk-eixos");
-    dispararChange("chk-medidas");
+    dispararChange("chk-cenario-mesa");
     dispararChange("slider-luz");
   }
 
@@ -498,13 +566,21 @@ export function initFerramentas(app) {
     app.setStatus(`Vista: ${rotulos[tipo] || tipo}`);
   }
 
+  function prepararCaptura() {
+    cenario?.atualizar();
+    sincronizarCameras();
+  }
+
   function capturarTela() {
+    prepararCaptura();
     app.renderer.render(app.scene, cameraAtiva());
     const link = document.createElement("a");
-    link.download = `visualizador-${Date.now()}.png`;
+    link.download = estado.cenarioMesa
+      ? `estudio-gd3d-${Date.now()}.png`
+      : `visualizador-${Date.now()}.png`;
     link.href = app.canvas.toDataURL("image/png");
     link.click();
-    app.setStatus("Captura de tela salva");
+    app.setStatus(estado.cenarioMesa ? "Captura do estúdio salva" : "Captura de tela salva");
   }
 
   function pararAnimacao() {
@@ -654,6 +730,7 @@ export function initFerramentas(app) {
     });
     document.getElementById("chk-grade")?.addEventListener("change", (e) => {
       estado.grade = e.target.checked;
+      if (e.target.checked) app.assentarModelosNaGrade?.();
       atualizarGrade();
       salvarPreferencias({ grade: e.target.checked });
     });
@@ -662,10 +739,23 @@ export function initFerramentas(app) {
       atualizarEixos();
       salvarPreferencias({ eixos: e.target.checked });
     });
-    document.getElementById("chk-medidas")?.addEventListener("change", (e) => {
-      estado.medidas = e.target.checked;
-      atualizarMedidasOverlay();
-      salvarPreferencias({ medidas: e.target.checked });
+    document.getElementById("chk-cenario-mesa")?.addEventListener("change", async (e) => {
+      estado.cenarioMesa = e.target.checked;
+      if (!cenario) cenario = criarCenarioShowcase(app);
+      await cenario.setAtivo(e.target.checked);
+      if (!cenario.getAtivo()) {
+        e.target.checked = false;
+        estado.cenarioMesa = false;
+        salvarPreferencias({ cenarioMesa: false });
+        return;
+      }
+      if (e.target.checked && estado.grade) {
+        estado.grade = false;
+        const chkGrade = document.getElementById("chk-grade");
+        if (chkGrade) chkGrade.checked = false;
+        removerGrade();
+      }
+      salvarPreferencias({ cenarioMesa: e.target.checked });
     });
     document.getElementById("chk-suportes")?.addEventListener("change", (e) => {
       estado.mostrarSuportes = e.target.checked;
@@ -754,12 +844,20 @@ export function initFerramentas(app) {
     aplicarFiltroCor,
     cameraAtiva,
     sincronizarCameras,
+    prepararCaptura,
+    isCenarioAtivo: () => estado.cenarioMesa,
     setLights(h, d) {
       hemiLight = h;
       dirLight = d;
+      if (dirLight) {
+        app.scene.add(dirLight.target);
+      }
     },
+    getHemiLight: () => hemiLight,
+    getDirLight: () => dirLight,
     getEstado: () => estado,
     getSecaoFilamentos: () => montarSecaoFilamentos(),
+    getSecaoFilamentosDeObject: (object) => montarSecaoFilamentosDeObject(object),
     salvarPreferencias,
     lerPreferencias,
     aplicarPreferencias,

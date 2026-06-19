@@ -29,13 +29,13 @@
           <div class="painel-items-header">
             <span class="painel-items-titulo">Items</span>
             <div class="painel-items-acoes">
-              <button type="button" id="items-btn-abrir" class="painel-items-btn" title="Abrir modelo">
+              <button type="button" id="items-btn-abrir" class="painel-items-btn" title="Abrir modelos (acumula na cena · Shift: substituir tudo)">
                 <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
               </button>
               <button type="button" id="items-btn-remover" class="painel-items-btn" title="Remover selecionado">
                 <i class="fa-solid fa-square-minus" aria-hidden="true"></i>
               </button>
-              <button type="button" id="items-btn-adicionar" class="painel-items-btn" title="Adicionar ficheiros">
+              <button type="button" id="items-btn-adicionar" class="painel-items-btn" title="Adicionar modelos à cena">
                 <i class="fa-solid fa-square-plus" aria-hidden="true"></i>
               </button>
             </div>
@@ -148,7 +148,12 @@
           <p class="cores-modelo-contagem" id="cores-modelo-contagem"></p>
           <p class="cores-modelo-vazio hidden" id="cores-modelo-vazio">Nenhuma cor detectada</p>
         </div>
-        <div id="placeholder" class="placeholder">Selecione um modelo 3D para começar</div>
+        <div id="placeholder" class="placeholder" role="button" tabindex="0" aria-label="Abrir ou arrastar modelos 3D">
+          <div class="placeholder-inner">
+            <i class="fa-solid fa-cubes placeholder-icone" aria-hidden="true"></i>
+            <p class="placeholder-texto">Clique ou arraste modelos 3D</p>
+          </div>
+        </div>
         <div id="loading-overlay" class="loading-overlay hidden">
           <div class="loading-spinner"></div>
           <p class="loading-text">Carregando...</p>
