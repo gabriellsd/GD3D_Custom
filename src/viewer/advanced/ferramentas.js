@@ -628,7 +628,7 @@ export function initFerramentas(app) {
     }
 
     if (estado.mixer) estado.mixer.update(delta);
-    if (estado.bbox) atualizarBbox();
+    if (estado.bbox && !estado.arrastando) atualizarBbox();
     if (estado.reguaPontos.length === 2) atualizarLabelRegua();
   }
 
@@ -656,6 +656,7 @@ export function initFerramentas(app) {
 
   function onPointerUp() {
     estado.arrastando = false;
+    if (estado.bbox) atualizarBbox();
   }
 
   function onPointerMoveDrag(dx) {

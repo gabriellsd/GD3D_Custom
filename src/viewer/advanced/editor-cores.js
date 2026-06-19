@@ -129,3 +129,17 @@ export function listarFilamentosEditaveis(object, metaBambu = null) {
 
   return itens;
 }
+
+/** Mapa slot AMS (1-based) → #RRGGBB efetivo na cena. */
+export function coletarCoresFilamentoPorSlot(object, metaBambu = null) {
+  const itens = listarFilamentosEditaveis(object, metaBambu);
+  const mapa = {};
+
+  for (const item of itens) {
+    if (item.slot > 0 && item.hex) {
+      mapa[item.slot] = item.hex;
+    }
+  }
+
+  return mapa;
+}

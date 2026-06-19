@@ -88,3 +88,44 @@ export function detectarPecasSeparaveis(modelObject, metaBambu = null) {
 
   return null;
 }
+
+/**
+ * Filamentos AMS dentro de uma peça (sub-linhas no painel Items).
+ * Só devolve lista quando há 2+ meshes filament-* na peça.
+ * @returns {Array<{ nome: string, object3d: import("three").Object3D, hex: string, meshUuid: string, slot: number }>}
+ */
+export function filamentosSubPeca(modelObject, metaBambu = null) {
+  const meshes = meshesFilamento(modelObject);
+  if (meshes.length < 2) return [];
+
+  return meshes.map((mesh) => {
+    const slot = parseInt(mesh.name.replace("filament-", ""), 10);
+    const hex =
+      corFilamentoMeta(metaBambu, slot) ||
+      (mesh.material?.color
+        ? `#${mesh.material.color.getHexString()}`.toUpperCase()
+        : "#CCCCCC");
+    return {
+      nome: rotuloFilamento(mesh, metaBambu),
+      object3d: mesh,
+      hex: normalizarHexCor(hex) || hex,
+      meshUuid: mesh.uuid,
+      slot,
+    };
+  });
+}
+
+/** Sub-linhas no painel Items: peças de montagem ou filamentos AMS. */
+export function subItensPainelPeca(modelObject, metaBambu = null) {
+  const montagem = filhosMontagem(modelObject);
+  if (montagem.length >= 2) {
+    return montagem.map((parte) => ({
+      nome: parte.name.trim() || "Peça",
+      object3d: parte,
+      hex: extrairCoresDoObject(parte, metaBambu)[0] ?? "#CCCCCC",
+      meshUuid: parte.uuid,
+      slot: 0,
+    }));
+  }
+  return filamentosSubPeca(modelObject, metaBambu);
+}

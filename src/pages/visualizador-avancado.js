@@ -27,8 +27,14 @@ import * as THREE from "three";
       aplicarOverrideMaterial,
       temCustomizacoesCores,
     } from "../viewer/advanced/editor-cores.js";
+    import {
+      exportar3mfComCores,
+      extensao3mf,
+      coletarCoresParaExportacao,
+    } from "../viewer/advanced/exportar-3mf-cores.js";
     import { criarSeletorCor } from "../viewer/advanced/seletor-cor.js";
-    import { detectarPecasSeparaveis } from "../viewer/advanced/pecas-modelo.js";
+    import { detectarPecasSeparaveis, filamentosSubPeca, subItensPainelPeca } from "../viewer/advanced/pecas-modelo.js";
+    import { detectarBandejas3mfBuffer } from "../viewer/advanced/bambu-bandejas.js";
 
 (async () => {
     await initShell({ page: 'viewer-advanced', title: 'Visualizador técnico — GD3D Creative' });
@@ -140,6 +146,7 @@ import * as THREE from "three";
     const drag = {
       active: false,
       panning: false,
+      manipulouObjeto: false,
       lastX: 0,
       lastY: 0,
     };
@@ -157,8 +164,16 @@ import * as THREE from "three";
       eixoLocalY: new THREE.Vector3(),
       quatDelta: new THREE.Quaternion(),
       offsetRotacao: new THREE.Vector3(),
+      centroMundo: new THREE.Vector3(),
+      posMundo: new THREE.Vector3(),
+      qWorld: new THREE.Quaternion(),
+      qParentWorld: new THREE.Quaternion(),
+      qRotY: new THREE.Quaternion(),
+      qRotX: new THREE.Quaternion(),
       hitArrastoInicio: null,
+      yBaseArrasto: 0,
       posicoesArrastoInicio: [],
+      pivotsRotacao: [],
       aguardarSelecaoCtrl: false,
     };
 
@@ -167,6 +182,10 @@ import * as THREE from "three";
     function velocidadeOrbita() {
       const largura = container.clientWidth || 800;
       return (Math.PI * 1.15) / largura;
+    }
+
+    function velocidadeRotacaoObjeto() {
+      return velocidadeOrbita() * 2.4;
     }
 
     function aplicarRotacao() {
@@ -247,6 +266,10 @@ import * as THREE from "three";
       return Boolean(itensSelecionados3d.length && temVariosModelosNaCena());
     }
 
+    function podeGirarSelecionadoNaCena() {
+      return itensSelecionados3d.length > 0;
+    }
+
     function atualizarHelpersSelecao() {
       for (const helper of helpersSelecao) helper.update?.();
     }
@@ -286,7 +309,9 @@ import * as THREE from "three";
               : `${n} modelos selecionados · arrastar girar · Shift+arrastar mover`
           );
         } else {
-          setStatus(`Selecionado: ${itensSelecionados3d[0].name}`);
+          setStatus(
+            `Selecionado: ${itensSelecionados3d[0].name} · arrastar girar no próprio eixo`
+          );
         }
       }
 
@@ -296,28 +321,70 @@ import * as THREE from "three";
       atualizarPainelInfo();
     }
 
-    function centroLocalDoObjeto(obj) {
-      obj.updateMatrixWorld(true);
-      const centroMundo = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
-      pick.pivotLocal.copy(obj.parent ? obj.parent.worldToLocal(centroMundo) : centroMundo);
-      return pick.pivotLocal;
+    function rotacionarEmTornoDoCentro(obj, deltaQ, centroMundo) {
+      pick.centroMundo.copy(centroMundo);
+      obj.getWorldPosition(pick.posMundo);
+
+      pick.posMundo.sub(pick.centroMundo).applyQuaternion(deltaQ).add(pick.centroMundo);
+
+      if (obj.parent) {
+        obj.parent.worldToLocal(pick.posMundo);
+      }
+      obj.position.copy(pick.posMundo);
+
+      obj.getWorldQuaternion(pick.qWorld);
+      pick.qWorld.premultiply(deltaQ);
+
+      if (obj.parent) {
+        obj.parent.getWorldQuaternion(pick.qParentWorld);
+        pick.qParentWorld.invert().multiply(pick.qWorld);
+        obj.quaternion.copy(pick.qParentWorld);
+      } else {
+        obj.quaternion.copy(pick.qWorld);
+      }
     }
 
-    function rotacionarEmTornoDoCentro(obj, deltaQ) {
-      centroLocalDoObjeto(obj);
-      pick.offsetRotacao.copy(obj.position).sub(pick.pivotLocal);
+    function noSemRotacao(node) {
+      if (!node) return true;
+      const { x, y, z } = node.quaternion;
+      return x * x + y * y + z * z < 1e-8;
+    }
+
+    function cadeiaSemRotacaoAteCena(obj) {
+      let node = obj.parent;
+      while (node) {
+        if (!noSemRotacao(node)) return false;
+        node = node.parent;
+      }
+      return true;
+    }
+
+    function iniciarRotacaoSelecionados() {
+      pick.pivotsRotacao = itensSelecionados3d.map((obj) => {
+        obj.updateMatrixWorld(true);
+        const centroMundo = new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3());
+        const pivotLocal = centroMundo.clone();
+        if (obj.parent) obj.parent.worldToLocal(pivotLocal);
+        return {
+          obj,
+          centroMundo: centroMundo.clone(),
+          pivotLocal,
+          rapido: cadeiaSemRotacaoAteCena(obj),
+        };
+      });
+    }
+
+    function rotacionarEmTornoDoPivotLocal(obj, deltaQ, pivotLocal) {
+      pick.offsetRotacao.copy(obj.position).sub(pivotLocal);
       pick.offsetRotacao.applyQuaternion(deltaQ);
-      obj.position.copy(pick.pivotLocal).add(pick.offsetRotacao);
+      obj.position.copy(pivotLocal).add(pick.offsetRotacao);
       obj.quaternion.premultiply(deltaQ);
     }
 
-    function intersetarPlanoDoObjeto(event, obj) {
-      if (!obj) return null;
+    function intersetarPlanoArrasto(event, yBase) {
       atualizarMouseNDC(event);
       pick.raio.setFromCamera(pick.mouse, camera);
-      obj.updateMatrixWorld(true);
-      const yBase = new THREE.Box3().setFromObject(obj).min.y;
-      pick.planoArrasto.set(new THREE.Vector3(0, 1, 0), -yBase);
+      pick.planoArrasto.set(pick.eixoLocalY.set(0, 1, 0), -yBase);
       return pick.raio.ray.intersectPlane(pick.planoArrasto, pick.pontoPlano)
         ? pick.pontoPlano.clone()
         : null;
@@ -326,7 +393,9 @@ import * as THREE from "three";
     function iniciarArrastoNoPlano(event) {
       const ref = itensSelecionados3d[0];
       if (!ref) return false;
-      const hit = intersetarPlanoDoObjeto(event, ref);
+      ref.updateMatrixWorld(true);
+      pick.yBaseArrasto = new THREE.Box3().setFromObject(ref).min.y;
+      const hit = intersetarPlanoArrasto(event, pick.yBaseArrasto);
       if (!hit) return false;
       pick.hitArrastoInicio = hit;
       pick.posicoesArrastoInicio = itensSelecionados3d.map((obj) => ({
@@ -339,34 +408,34 @@ import * as THREE from "three";
     function moverSelecionadoNoPlano(event) {
       const ref = itensSelecionados3d[0];
       if (!ref || !pick.hitArrastoInicio || !pick.posicoesArrastoInicio.length) return;
-      const hit = intersetarPlanoDoObjeto(event, ref);
+      const hit = intersetarPlanoArrasto(event, pick.yBaseArrasto);
       if (!hit) return;
       const delta = hit.sub(pick.hitArrastoInicio);
       for (const item of pick.posicoesArrastoInicio) {
         item.obj.position.copy(item.pos).add(delta);
-        item.obj.updateMatrixWorld(true);
       }
-      atualizarHelpersSelecao();
-      ferramentas?.atualizarAuxiliaresVisuais?.();
+      drag.manipulouObjeto = true;
     }
 
     function girarSelecionado(dx, dy) {
-      if (!itensSelecionados3d.length) return;
-      const sens = velocidadeOrbita() * 0.85;
+      if (!pick.pivotsRotacao.length) return;
+      const sens = velocidadeRotacaoObjeto();
 
-      for (const obj of itensSelecionados3d) {
-        pick.eixoLocalY.set(0, 1, 0).applyQuaternion(obj.quaternion).normalize();
-        pick.eixoLocalX.set(1, 0, 0).applyQuaternion(obj.quaternion).normalize();
+      camera.updateMatrixWorld();
+      eixoCameraDireita.setFromMatrixColumn(camera.matrix, 0);
 
-        const qY = new THREE.Quaternion().setFromAxisAngle(pick.eixoLocalY, -dx * sens);
-        const qX = new THREE.Quaternion().setFromAxisAngle(pick.eixoLocalX, -dy * sens);
-        pick.quatDelta.copy(qY).multiply(qX);
+      pick.qRotY.setFromAxisAngle(pick.eixoLocalY.set(0, 1, 0), -dx * sens);
+      pick.qRotX.setFromAxisAngle(eixoCameraDireita, -dy * sens);
+      pick.quatDelta.copy(pick.qRotY).multiply(pick.qRotX);
 
-        rotacionarEmTornoDoCentro(obj, pick.quatDelta);
-        obj.updateMatrixWorld(true);
+      for (const item of pick.pivotsRotacao) {
+        if (item.rapido) {
+          rotacionarEmTornoDoPivotLocal(item.obj, pick.quatDelta, item.pivotLocal);
+        } else {
+          rotacionarEmTornoDoCentro(item.obj, pick.quatDelta, item.centroMundo);
+        }
       }
-      atualizarHelpersSelecao();
-      ferramentas?.atualizarAuxiliaresVisuais?.();
+      drag.manipulouObjeto = true;
     }
 
     function atualizarMouseNDC(event) {
@@ -407,6 +476,8 @@ import * as THREE from "three";
 
       pick.aguardarSelecaoCtrl = false;
 
+      drag.manipulouObjeto = false;
+
       if (event.button === 0 && !event.shiftKey) {
         drag.active = true;
         drag.panning = false;
@@ -427,6 +498,10 @@ import * as THREE from "three";
 
       if (drag.panning && manipularSelecionadoNaCena()) {
         iniciarArrastoNoPlano(event);
+      } else if (!drag.panning && podeGirarSelecionadoNaCena()) {
+        iniciarRotacaoSelecionados();
+      } else {
+        pick.pivotsRotacao = [];
       }
 
       canvas.setPointerCapture(event.pointerId);
@@ -453,9 +528,17 @@ import * as THREE from "three";
         selecionarGrupoNaCena(event);
       }
 
+      const manipulouObjeto = drag.manipulouObjeto;
       drag.active = false;
       drag.panning = false;
+      drag.manipulouObjeto = false;
+      pick.pivotsRotacao = [];
       ferramentas?.onPointerUp();
+      if (manipulouObjeto) {
+        atualizarHelpersSelecao();
+        ferramentas?.atualizarAuxiliaresVisuais?.();
+        updateCamera();
+      }
       if (canvas.hasPointerCapture(event.pointerId)) {
         canvas.releasePointerCapture(event.pointerId);
       }
@@ -464,10 +547,17 @@ import * as THREE from "three";
     canvas.addEventListener("pointermove", (event) => {
       if (!drag.active) return;
 
-      const dx = event.clientX - drag.lastX;
-      const dy = event.clientY - drag.lastY;
-      drag.lastX = event.clientX;
-      drag.lastY = event.clientY;
+      const eventos = event.getCoalescedEvents?.().length
+        ? event.getCoalescedEvents()
+        : [event];
+      let dx = 0;
+      let dy = 0;
+      for (const ev of eventos) {
+        dx += ev.clientX - drag.lastX;
+        dy += ev.clientY - drag.lastY;
+        drag.lastX = ev.clientX;
+        drag.lastY = ev.clientY;
+      }
 
       if (drag.panning) {
         if (manipularSelecionadoNaCena()) {
@@ -484,7 +574,7 @@ import * as THREE from "three";
         return;
       }
 
-      if (manipularSelecionadoNaCena()) {
+      if (podeGirarSelecionadoNaCena()) {
         girarSelecionado(dx, dy);
         return;
       }
@@ -1467,31 +1557,184 @@ import * as THREE from "three";
       return base.length > 22 ? `${base.slice(0, 20)}…` : base;
     }
 
+    function encontrarGrupoPainelItems(object3d) {
+      if (!object3d) return null;
+      for (const grupo of painelItems?.getGrupos() ?? []) {
+        if (grupo.object3d === object3d) return grupo;
+        if (grupo.pecas.some((peca) => peca.object3d === object3d)) return grupo;
+        let dentro = false;
+        grupo.object3d.traverse((child) => {
+          if (child === object3d) dentro = true;
+        });
+        if (dentro) return grupo;
+      }
+      return null;
+    }
+
+    function resolverInnerPeca(object3d) {
+      return object3d?.children?.[0]?.children?.[0] ?? object3d;
+    }
+
+    function deduplicarFilamentosPorHex(filamentos) {
+      const mapa = new Map();
+      for (const f of filamentos) {
+        const hex = (f.hex || "").toUpperCase();
+        const chave = `${f.slot || 0}:${hex}`;
+        if (!mapa.has(chave)) {
+          mapa.set(chave, { ...f, meshUuids: [f.meshUuid] });
+        } else {
+          mapa.get(chave).meshUuids.push(f.meshUuid);
+        }
+      }
+      return [...mapa.values()];
+    }
+
+    function filamentosParaPainelCores(alvo, meta, { deduplicar = true } = {}) {
+      const subItens = subItensPainelPeca(alvo, meta);
+      let filamentos;
+
+      if (subItens.length >= 2) {
+        filamentos = [];
+        for (const sub of subItens) {
+          for (const f of listarFilamentosEditaveis(sub.object3d, meta)) {
+            filamentos.push({
+              meshUuid: f.meshUuid,
+              nome: rotuloFilamentoEditor(f),
+              hex: f.hex,
+              slot: f.slot,
+              customizada: f.customizada,
+            });
+          }
+        }
+      } else {
+        filamentos = listarFilamentosEditaveis(alvo, meta).map((f) => ({
+          meshUuid: f.meshUuid,
+          nome: rotuloFilamentoEditor(f),
+          hex: f.hex,
+          slot: f.slot,
+          customizada: f.customizada,
+        }));
+      }
+
+      if (!deduplicar || filamentos.length <= 1) {
+        return filamentos.map((f) => ({ ...f, meshUuids: [f.meshUuid] }));
+      }
+      return deduplicarFilamentosPorHex(filamentos);
+    }
+
+    function filamentosParaItemsPeca(alvo, meta) {
+      const subItens = subItensPainelPeca(alvo, meta);
+      if (subItens.length >= 2) {
+        return subItens.map((f) => ({
+          meshUuid: f.meshUuid,
+          nome: f.nome,
+          hex: f.hex,
+          slot: f.slot,
+        }));
+      }
+      return listarFilamentosEditaveis(alvo, meta).map((f) => ({
+        meshUuid: f.meshUuid,
+        nome: rotuloFilamentoEditor(f),
+        hex: f.hex,
+        slot: f.slot,
+        customizada: f.customizada,
+      }));
+    }
+
+    function montarEntradaCoresPeca(peca, { subPeca = null } = {}) {
+      const alvo = subPeca?.object3d ?? resolverInnerPeca(peca.object3d);
+      const meta = metaBambuDoObject(alvo);
+      let filamentos;
+
+      if (subPeca) {
+        const editaveis = listarFilamentosEditaveis(subPeca.object3d, meta);
+        filamentos = (editaveis.length ? editaveis : [{ meshUuid: subPeca.meshUuid, hex: subPeca.hex, slot: subPeca.slot ?? 0, nome: subPeca.nome }]).map(
+          (f) => ({
+            meshUuid: f.meshUuid,
+            nome: rotuloFilamentoEditor(f),
+            hex: f.hex,
+            slot: f.slot,
+            customizada: f.customizada,
+            meshUuids: [f.meshUuid],
+          })
+        );
+      } else {
+        filamentos = filamentosParaPainelCores(alvo, meta);
+      }
+
+      return {
+        id: peca.id,
+        nome: subPeca ? `${peca.nome} · ${subPeca.nome}` : peca.nome,
+        cores: extrairCoresDoObject(alvo, meta),
+        filamentos,
+      };
+    }
+
+    function coletarCoresSelecionados(object3ds) {
+      const entradas = [];
+      const vistos = new Set();
+
+      for (const object3d of object3ds) {
+        let resolvido = false;
+
+        for (const grupo of painelItems?.getGrupos() ?? []) {
+          if (grupo.object3d === object3d) {
+            for (const peca of grupo.pecas) {
+              if (vistos.has(peca.id)) continue;
+              vistos.add(peca.id);
+              entradas.push(montarEntradaCoresPeca(peca));
+            }
+            resolvido = true;
+            break;
+          }
+
+          for (const peca of grupo.pecas) {
+            if (peca.object3d === object3d) {
+              if (!vistos.has(peca.id)) {
+                vistos.add(peca.id);
+                entradas.push(montarEntradaCoresPeca(peca));
+              }
+              resolvido = true;
+              break;
+            }
+
+            for (const fil of peca.filamentos ?? []) {
+              if (fil.object3d !== object3d) continue;
+              const chave = `${peca.id}:${fil.id}`;
+              if (!vistos.has(chave)) {
+                vistos.add(chave);
+                entradas.push(montarEntradaCoresPeca(peca, { subPeca: fil }));
+              }
+              resolvido = true;
+              break;
+            }
+            if (resolvido) break;
+          }
+          if (resolvido) break;
+        }
+      }
+
+      return entradas;
+    }
+
     function coletarCoresDoGrupo(object3d) {
       if (!object3d) return [];
-      const grupo = painelItems?.getGrupos()?.find((g) => g.object3d === object3d);
+      const grupo = encontrarGrupoPainelItems(object3d);
       if (!grupo) return [];
-      return grupo.pecas.map((peca) => {
-        const meta = metaBambuDoObject(peca.object3d);
-        return {
-          id: peca.id,
-          nome: peca.nome,
-          cores: extrairCoresDoObject(peca.object3d, meta),
-          filamentos: listarFilamentosEditaveis(peca.object3d, meta),
-        };
-      });
+      return grupo.pecas.map((peca) => montarEntradaCoresPeca(peca));
     }
 
     function coletarCoresPecas() {
       const entradas = [];
       for (const grupo of painelItems?.getGrupos() ?? []) {
         for (const peca of grupo.pecas) {
-          const meta = metaBambuDoObject(peca.object3d);
+          const alvo = resolverInnerPeca(peca.object3d);
+          const meta = metaBambuDoObject(alvo);
           entradas.push({
             id: peca.id,
             nome: peca.nome,
-            cores: extrairCoresDoObject(peca.object3d, meta),
-            filamentos: listarFilamentosEditaveis(peca.object3d, meta),
+            cores: extrairCoresDoObject(alvo, meta),
+            filamentos: filamentosParaItemsPeca(alvo, meta),
           });
         }
       }
@@ -1508,8 +1751,10 @@ import * as THREE from "three";
 
     function renderFilamentoLinha(f) {
       const rotulo = rotuloFilamentoEditor(f);
+      const meshUuids = f.meshUuids?.length ? f.meshUuids : [f.meshUuid];
+      const meshUuid = meshUuids[0];
       return `
-        <div class="cores-filamento-linha${f.customizada ? " is-customizada" : ""}" data-mesh-uuid="${f.meshUuid}">
+        <div class="cores-filamento-linha${f.customizada ? " is-customizada" : ""}" data-mesh-uuid="${meshUuid}" data-mesh-uuids="${meshUuids.join(",")}">
           <span class="cores-filamento-rotulo" title="${escapeHtmlTexto(f.hex)}">${escapeHtmlTexto(rotulo)}</span>
           <div class="cores-filamento-acoes">
             <span class="cor-modelo-swatch" data-hex="${f.hex}" data-mesh-uuid="${f.meshUuid}" style="background-color:${f.hex}" title="Clique para filtrar"></span>
@@ -1534,21 +1779,39 @@ import * as THREE from "three";
       linha?.querySelector(".cores-filamento-rotulo")?.setAttribute("title", hex);
     }
 
-    function alterarCorFilamento(meshUuid, hex, { refreshPainel = true } = {}) {
-      const mesh = encontrarMeshPorUuid(meshUuid);
-      if (!mesh || !aplicarCorMesh(mesh, hex, materiaisOriginais)) return false;
-      actualizarSwatchDom(meshUuid, normalizarHexCor(hex) || hex);
+    function meshUuidsDaLinha(linha) {
+      const lista = linha?.dataset.meshUuids;
+      if (lista) return lista.split(",").filter(Boolean);
+      const unico = linha?.dataset.meshUuid;
+      return unico ? [unico] : [];
+    }
+
+    function alterarCorFilamento(meshUuid, hex, { refreshPainel = true, meshUuids = null } = {}) {
+      const alvos = meshUuids?.length ? meshUuids : [meshUuid];
+      let alterou = false;
+      for (const uuid of alvos) {
+        const mesh = encontrarMeshPorUuid(uuid);
+        if (mesh && aplicarCorMesh(mesh, hex, materiaisOriginais)) alterou = true;
+      }
+      if (!alterou) return false;
+      const hexNorm = normalizarHexCor(hex) || hex;
+      for (const uuid of alvos) actualizarSwatchDom(uuid, hexNorm);
       if (refreshPainel) {
         ferramentas?.aplicarFiltroCor(null);
         atualizarCoresUi();
-        setStatus(`Cor alterada: ${normalizarHexCor(hex) || hex}`);
+        setStatus(`Cor alterada: ${hexNorm}`);
       }
       return true;
     }
 
-    function restaurarCorFilamento(meshUuid) {
-      const mesh = encontrarMeshPorUuid(meshUuid);
-      if (!mesh || !restaurarCorMesh(mesh, materiaisOriginais)) return false;
+    function restaurarCorFilamento(meshUuid, { meshUuids = null } = {}) {
+      const alvos = meshUuids?.length ? meshUuids : [meshUuid];
+      let restaurou = false;
+      for (const uuid of alvos) {
+        const mesh = encontrarMeshPorUuid(uuid);
+        if (mesh && restaurarCorMesh(mesh, materiaisOriginais)) restaurou = true;
+      }
+      if (!restaurou) return false;
       ferramentas?.aplicarFiltroCor(null);
       atualizarCoresUi();
       setStatus("Cor restaurada");
@@ -1556,6 +1819,7 @@ import * as THREE from "three";
     }
 
     function abrirPickerCor(linha, meshUuid) {
+      const uuids = meshUuidsDaLinha(linha);
       const swatch = linha?.querySelector(".cor-modelo-swatch");
       const hexAtual = swatch?.dataset.hex || "#FFFFFF";
       const anchor = linha?.querySelector(".cores-filamento-btn--picker") || swatch;
@@ -1564,17 +1828,23 @@ import * as THREE from "three";
       seletorCor.abrir({
         anchor,
         hexInicial: hexAtual,
-        onChange: (hex) => alterarCorFilamento(meshUuid, hex, { refreshPainel: false }),
+        onChange: (hex) =>
+          alterarCorFilamento(meshUuid, hex, { refreshPainel: false, meshUuids: uuids }),
         onClose: () => {
-          if (meshUuidPickerAberto) {
-            ferramentas?.aplicarFiltroCor(null);
-            atualizarCoresUi();
-            const hex = document.querySelector(
-              `.cor-modelo-swatch[data-mesh-uuid="${meshUuidPickerAberto}"]`
-            )?.dataset.hex;
-            if (hex) setStatus(`Cor aplicada: ${hex}`);
-          }
+          const uuid = meshUuidPickerAberto;
           meshUuidPickerAberto = null;
+          if (!uuid) return;
+
+          ferramentas?.aplicarFiltroCor(null);
+          painelItems?.atualizarCoresPecas(coletarCoresPecas());
+          document.getElementById("cores-modelo-restaurar-todas")?.classList.toggle(
+            "hidden",
+            !temCustomizacoesCores()
+          );
+          atualizarBotaoExportar3mf(coletarCoresPecas());
+
+          const hex = document.querySelector(`.cor-modelo-swatch[data-mesh-uuid="${uuid}"]`)?.dataset.hex;
+          if (hex) setStatus(`Cor aplicada: ${hex}`);
         },
       });
     }
@@ -1599,7 +1869,7 @@ import * as THREE from "three";
         reset?.addEventListener("click", (event) => {
           event.stopPropagation();
           seletorCor.fechar();
-          restaurarCorFilamento(meshUuid);
+          restaurarCorFilamento(meshUuid, { meshUuids: meshUuidsDaLinha(linha) });
         });
       });
 
@@ -1674,6 +1944,93 @@ import * as THREE from "three";
           : `${comCor.length} ficheiros · ${totalCores} cores · paleta para editar`;
     }
 
+    function encontrarGrupoComArquivoFonte(node) {
+      let atual = node;
+      while (atual) {
+        if (atual.userData?.arquivoFonte && extensao3mf(atual.userData.arquivoFonte.name)) {
+          return atual;
+        }
+        if (atual.parent === currentModel) break;
+        atual = atual.parent;
+      }
+      return null;
+    }
+
+    function resolverExportacao3mfCores() {
+      const arquivos3mf = (ultimoArquivosImportados || []).filter((f) => extensao3mf(f.name));
+
+      let objectAlvo = currentModel;
+      let arquivo = null;
+
+      if (itensSelecionados3d.length === 1) {
+        objectAlvo = encontrarGrupoComArquivoFonte(itensSelecionados3d[0]) ?? itensSelecionados3d[0];
+        arquivo = objectAlvo?.userData?.arquivoFonte ?? null;
+      } else if (arquivos3mf.length === 1) {
+        arquivo = arquivos3mf[0];
+      } else if (arquivos3mf.length > 1) {
+        return {
+          erro: "Vários 3MF na cena — selecione um grupo em Items para exportar o ficheiro certo.",
+        };
+      }
+
+      if (!arquivo && ultimoArquivoFile && extensao3mf(ultimoArquivoFile.name)) {
+        arquivo = ultimoArquivoFile;
+      }
+
+      if (!arquivo) {
+        return { erro: "Carregue um ficheiro 3MF Bambu/Orca para exportar as cores." };
+      }
+
+      const meta =
+        objectAlvo?.userData?.bambuExtras ??
+        objectAlvo?.userData?.extras?.bambu ??
+        ultimoExtras?.bambu ??
+        null;
+      const cores = coletarCoresParaExportacao(objectAlvo, meta);
+
+      if (!Object.keys(cores).length) {
+        return { erro: "Este modelo não tem filamentos AMS editáveis para exportar." };
+      }
+
+      return { arquivo, objectAlvo, cores };
+    }
+
+    function atualizarBotaoExportar3mf(entradas) {
+      const btn = document.getElementById("cores-modelo-exportar-3mf");
+      if (!btn) return;
+
+      const temFilamentos = entradas.some((e) => e.filamentos?.length);
+      const tem3mf = (ultimoArquivosImportados || []).some((f) => extensao3mf(f.name));
+      const destino = resolverExportacao3mfCores();
+      const visivel = temFilamentos && tem3mf;
+
+      btn.classList.toggle("hidden", !visivel);
+      btn.disabled = Boolean(destino.erro);
+      btn.title = destino.erro || "Guardar 3MF com as cores de filamento atuais";
+    }
+
+    async function exportar3mfCoresAtuais() {
+      const destino = resolverExportacao3mfCores();
+      if (destino.erro) {
+        setStatus(destino.erro, true);
+        return;
+      }
+
+      const btn = document.getElementById("cores-modelo-exportar-3mf");
+      if (btn) btn.disabled = true;
+
+      try {
+        setStatus("A preparar 3MF com cores…");
+        const buffer = await destino.arquivo.arrayBuffer();
+        exportar3mfComCores(buffer, destino.cores, destino.arquivo.name);
+        setStatus(`3MF exportado: ${destino.arquivo.name.replace(/\.[^.]+$/, "")}-cores.3mf`);
+      } catch (err) {
+        setStatus(`Exportar 3MF: ${err.message}`, true);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     function atualizarCoresUi() {
       if (!painelItems?.temItems()) {
         limparCoresModelo();
@@ -1689,14 +2046,19 @@ import * as THREE from "three";
 
       let entradasPainel;
       if (itensSelecionados3d.length) {
-        entradasPainel = [];
-        for (const obj of itensSelecionados3d) {
-          entradasPainel.push(...coletarCoresDoGrupo(obj));
-        }
+        entradasPainel = coletarCoresSelecionados(itensSelecionados3d);
       } else {
-        entradasPainel = todasEntradas;
+        entradasPainel = todasEntradas.map((entrada) => {
+          const peca = painelItems
+            ?.getGrupos()
+            ?.flatMap((g) => g.pecas)
+            .find((p) => p.id === entrada.id);
+          if (!peca) return entrada;
+          return montarEntradaCoresPeca(peca);
+        });
       }
       renderizarPainelCores(entradasPainel);
+      atualizarBotaoExportar3mf(entradasPainel);
     }
 
     function limparCoresModelo() {
@@ -1705,6 +2067,7 @@ import * as THREE from "three";
       document.getElementById("cores-modelo-contagem").textContent = "";
       document.getElementById("cores-modelo-vazio").classList.add("hidden");
       document.getElementById("cores-modelo-restaurar-todas")?.classList.add("hidden");
+      document.getElementById("cores-modelo-exportar-3mf")?.classList.add("hidden");
     }
 
     function apresentarImportacao({ importGroups, arquivoMeta, extras = {}, append = false }) {
@@ -1735,6 +2098,7 @@ import * as THREE from "three";
         grupo.object3d.userData.arquivoMeta = metaGrupo;
         grupo.object3d.userData.extras = grupo.extras ?? extras;
         grupo.object3d.userData.formato = grupo.formato ?? ultimoFormato;
+        if (grupo.arquivo) grupo.object3d.userData.arquivoFonte = grupo.arquivo;
         currentModel.add(grupo.object3d);
         painelItems?.adicionarGrupo({
           nome: grupo.nome,
@@ -1789,9 +2153,7 @@ import * as THREE from "three";
 
       placeholder.classList.add("hidden");
       atualizarCoresUi();
-      if (importGroups.length) {
-        painelItems?.selecionarPorObject3d?.(importGroups[importGroups.length - 1].object3d);
-      }
+      painelItems?.limparSelecao?.();
       ferramentas?.sincronizarCameras();
       const medidasConv = converterMedidas(geo, ultimoFormato);
       const tamanhoSugerido = formatarMedida(medidasConv.maiorDim, medidasConv.unidade);
@@ -1807,20 +2169,74 @@ import * as THREE from "three";
       );
     }
 
+    function montarPecasPorBandejas(buffer, extras) {
+      const bandejas = detectarBandejas3mfBuffer(buffer);
+      if (bandejas.length <= 1) return null;
+
+      const raiz = new THREE.Group();
+      const pecas = [];
+      let offsetX = 0;
+      const gap = 24;
+      let metaBambu = null;
+
+      for (const bandeja of bandejas) {
+        const resultado = carregar3mf(buffer, {
+          bandeja: bandeja.numero,
+          layout: "montado",
+        });
+        metaBambu = metaBambu ?? resultado.meta;
+
+        const wrapped = criarContainerModelo(resultado.object, "3mf");
+        wrapped.name = `Bandeja ${bandeja.numero}`;
+        wrapped.userData.bandeja = bandeja.numero;
+        if (resultado.meta) wrapped.userData.bambuExtras = resultado.meta;
+
+        wrapped.position.x = offsetX;
+        wrapped.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(wrapped);
+        const size = box.getSize(new THREE.Vector3());
+        offsetX += size.x + gap;
+
+        raiz.add(wrapped);
+
+        const inner = resultado.object;
+        const subItens = subItensPainelPeca(inner, resultado.meta);
+        pecas.push({
+          nome: `Bandeja ${bandeja.numero} (${bandeja.pecas.length} peças)`,
+          object3d: wrapped,
+          cores: extrairCoresDoObject(inner, resultado.meta),
+          filamentos: subItens,
+          bandeja: bandeja.numero,
+        });
+      }
+
+      raiz.name = "Bandejas";
+      return { object: raiz, pecas, bandejas, meta: metaBambu };
+    }
+
     function montarPecasImportacao(object, nomeFicheiro, extras = {}) {
       const inner = object.children[0]?.children?.[0] ?? object;
-      const separadas = detectarPecasSeparaveis(inner, extras.bambu);
+      const meta = extras.bambu ?? null;
+      const separadas = detectarPecasSeparaveis(inner, meta);
       if (separadas?.length >= 2) {
         return separadas.map((peca) => ({
           nome: peca.nome,
           object3d: peca.object3d,
           cores: peca.cores ?? [],
+          filamentos: filamentosSubPeca(peca.object3d, meta),
         }));
       }
-      return [{ nome: nomeFicheiro, object3d: object, cores: extras.coresArquivo ?? [] }];
+      return [
+        {
+          nome: nomeFicheiro,
+          object3d: object,
+          cores: extras.coresArquivo ?? [],
+          filamentos: filamentosSubPeca(inner, meta),
+        },
+      ];
     }
 
-    function showModel(object, arquivoMeta, extras = {}, { append = false, nomeFicheiro = null } = {}) {
+    function showModel(object, arquivoMeta, extras = {}, { append = false, nomeFicheiro = null, arquivo = null, pecas = null } = {}) {
       const nome = nomeFicheiro || arquivoMeta?.nome || "Modelo";
       const nomeExibicao = nomeBaseArquivo({ name: nome });
       const importGroup = new THREE.Group();
@@ -1830,15 +2246,21 @@ import * as THREE from "three";
       if (extras.bambu) object.userData.bambuExtras = extras.bambu;
       if (Array.isArray(extras.coresArquivo)) object.userData.coresArquivo = extras.coresArquivo;
 
-      apresentarImportacao({
+      const pecasPainel =
+        pecas ??
+        extras.pecasImportacao ??
+        montarPecasImportacao(object, nome, extras);
+
+        apresentarImportacao({
         importGroups: [
           {
             nome: nomeExibicao,
             object3d: importGroup,
-            pecas: montarPecasImportacao(object, nome, extras),
+            pecas: pecasPainel,
             arquivoMeta,
             extras,
             formato: (arquivoMeta?.formato || "STL").split(" + ")[0],
+            arquivo: arquivo ?? ultimoArquivoFile,
           },
         ],
         arquivoMeta,
@@ -1881,10 +2303,21 @@ import * as THREE from "three";
           }
         } else if (ext === "3mf" || ext === "mf3") {
           const buffer = await file.arrayBuffer();
+          extras.coresArquivo = extrairCoresDo3mfBuffer(buffer);
+
+          const multiBandeja = montarPecasPorBandejas(buffer, extras);
+          if (multiBandeja) {
+            object = multiBandeja.object;
+            extras.bambu = multiBandeja.meta;
+            extras.bandejas = multiBandeja.bandejas;
+            extras.pecasImportacao = multiBandeja.pecas;
+            extras.multiBandeja = true;
+            return { object, extras };
+          }
+
           const resultado = carregar3mf(buffer);
           object = resultado.object;
           extras.bambu = resultado.meta;
-          extras.coresArquivo = extrairCoresDo3mfBuffer(buffer);
         } else {
           throw new Error(`Formato .${ext} não suportado.`);
         }
@@ -1941,6 +2374,7 @@ import * as THREE from "three";
               arquivoMeta: meta,
               extras: item.extras,
               formato: item.ext.toUpperCase(),
+              arquivo: item.arquivo,
             };
           })
         );
@@ -2000,10 +2434,19 @@ import * as THREE from "three";
         const { object, extras } = await carregarObjetoBruto(file, arquivosRelacionados);
         if (extras.fbxUrls) fbxUrlsAtivas = extras.fbxUrls;
 
-        showModel(criarContainerModelo(object, ext), arquivoMeta, extras, {
+        const modeloExibir = extras.multiBandeja ? object : criarContainerModelo(object, ext);
+
+        showModel(modeloExibir, arquivoMeta, extras, {
           append: acumular,
           nomeFicheiro: file.name,
+          arquivo: file,
         });
+
+        if (extras.bandejas?.length > 1) {
+          setStatus(
+            `${nomeBaseArquivo(file)} — ${extras.bandejas.length} bandejas carregadas separadamente`
+          );
+        }
       } catch (err) {
         setStatus(`Erro: ${err.message}`, true);
       } finally {
@@ -2068,12 +2511,12 @@ import * as THREE from "three";
         ferramentas?.aplicarFiltroCor(hex);
         setStatus(`Cor selecionada: ${hex}`);
       },
-      onSelecaoAlterada: (grupos) => {
-        if (!grupos?.length) {
+      onSelecaoAlterada: (object3ds) => {
+        if (!object3ds?.length) {
           definirItensSelecionados([]);
           return;
         }
-        definirItensSelecionados(grupos.map((g) => g.object3d));
+        definirItensSelecionados(object3ds);
       },
     });
     painelItems.bindUi();
@@ -2083,6 +2526,10 @@ import * as THREE from "three";
       ferramentas?.aplicarFiltroCor(null);
       atualizarCoresUi();
       setStatus(n ? `${n} cor(es) restaurada(s)` : "Nenhuma cor personalizada");
+    });
+
+    document.getElementById("cores-modelo-exportar-3mf")?.addEventListener("click", () => {
+      exportar3mfCoresAtuais();
     });
 
     function initImportacaoPorArrastar() {

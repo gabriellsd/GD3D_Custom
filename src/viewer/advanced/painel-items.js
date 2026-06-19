@@ -57,53 +57,208 @@ export function initPainelItems(app) {
   function encontrarNo(id) {
     for (const grupo of estado.grupos) {
       if (grupo.id === id) return { tipo: 'grupo', grupo };
-      const peca = grupo.pecas.find((p) => p.id === id);
-      if (peca) return { tipo: 'peca', grupo, peca };
+      for (const peca of grupo.pecas) {
+        if (peca.id === id) return { tipo: 'peca', grupo, peca };
+        const filamento = peca.filamentos?.find((f) => f.id === id);
+        if (filamento) return { tipo: 'filamento', grupo, peca, filamento };
+      }
     }
     return null;
-  }
-
-  function idGrupoDeNo(id) {
-    const no = encontrarNo(id);
-    return no?.grupo?.id ?? null;
   }
 
   function getGruposSelecionados() {
     return estado.grupos.filter((g) => estado.selecionadosIds.has(g.id));
   }
 
+  function getObject3dsSelecionados() {
+    const vistos = new Set();
+    const objetos = [];
+
+    for (const id of estado.selecionadosIds) {
+      const no = encontrarNo(id);
+      if (!no) continue;
+
+      let alvo = null;
+      if (no.tipo === "grupo") alvo = no.grupo.object3d;
+      else if (no.tipo === "peca") alvo = no.peca.object3d;
+      else if (no.tipo === "filamento") alvo = no.filamento.object3d;
+
+      if (alvo && !vistos.has(alvo.uuid)) {
+        vistos.add(alvo.uuid);
+        objetos.push(alvo);
+      }
+    }
+
+    return objetos;
+  }
+
+  function restaurarVisibilidadeCompleta() {
+    for (const grupo of estado.grupos) {
+      grupo.visivel = true;
+      definirVisibilidade(grupo.object3d, true);
+      for (const peca of grupo.pecas) {
+        peca.visivel = true;
+        definirVisibilidade(peca.object3d, true);
+        for (const f of peca.filamentos ?? []) {
+          f.visivel = true;
+          if (f.object3d) definirVisibilidade(f.object3d, true);
+        }
+      }
+    }
+  }
+
+  function aplicarIsolamentoSelecao() {
+    if (!estado.selecionadosIds.size) {
+      restaurarVisibilidadeCompleta();
+      app.onVisibilidadeAlterada?.();
+      return;
+    }
+
+    const nos = [...estado.selecionadosIds]
+      .map((id) => encontrarNo(id))
+      .filter(Boolean);
+    const temPecaOuFil = nos.some((n) => n.tipo === "peca" || n.tipo === "filamento");
+
+    if (!temPecaOuFil) {
+      restaurarVisibilidadeCompleta();
+      app.onVisibilidadeAlterada?.();
+      return;
+    }
+
+    const pecasVisiveisPorGrupo = new Map();
+    const filamentosVisiveisPorPeca = new Map();
+
+    for (const no of nos) {
+      if (no.tipo === "grupo") {
+        pecasVisiveisPorGrupo.set(no.grupo.id, new Set(no.grupo.pecas.map((p) => p.id)));
+        continue;
+      }
+      if (no.tipo === "peca" || no.tipo === "filamento") {
+        const gid = no.grupo.id;
+        if (!pecasVisiveisPorGrupo.has(gid)) pecasVisiveisPorGrupo.set(gid, new Set());
+        pecasVisiveisPorGrupo.get(gid).add(no.peca.id);
+      }
+      if (no.tipo === "filamento") {
+        if (!filamentosVisiveisPorPeca.has(no.peca.id)) {
+          filamentosVisiveisPorPeca.set(no.peca.id, new Set());
+        }
+        filamentosVisiveisPorPeca.get(no.peca.id).add(no.filamento.id);
+      }
+    }
+
+    for (const grupo of estado.grupos) {
+      const pecasAlvo = pecasVisiveisPorGrupo.get(grupo.id);
+      const isolarPecas = pecasAlvo && grupo.pecas.length > 1;
+
+      for (const peca of grupo.pecas) {
+        const mostrarPeca = !isolarPecas || pecasAlvo.has(peca.id);
+        const filsAlvo = filamentosVisiveisPorPeca.get(peca.id);
+        const isolarFils = Boolean(filsAlvo?.size && peca.filamentos?.length);
+
+        if (!mostrarPeca) {
+          peca.visivel = false;
+          definirVisibilidade(peca.object3d, false);
+          for (const f of peca.filamentos ?? []) f.visivel = false;
+          continue;
+        }
+
+        peca.visivel = true;
+
+        if (!isolarFils) {
+          definirVisibilidade(peca.object3d, true);
+          for (const f of peca.filamentos ?? []) {
+            f.visivel = true;
+            if (f.object3d) definirVisibilidade(f.object3d, true);
+          }
+          continue;
+        }
+
+        definirVisibilidade(peca.object3d, true);
+        for (const f of peca.filamentos) {
+          const vis = filsAlvo.has(f.id);
+          f.visivel = vis;
+          if (f.object3d) definirVisibilidade(f.object3d, vis);
+        }
+      }
+
+      grupo.visivel = grupo.pecas.some((p) => p.visivel);
+    }
+
+    app.onVisibilidadeAlterada?.();
+  }
+
   function emitirSelecao() {
-    app.onSelecaoAlterada?.(getGruposSelecionados());
+    app.onSelecaoAlterada?.(getObject3dsSelecionados());
   }
 
   function selecionar(id, { ctrlKey = false } = {}) {
-    const grupoId = idGrupoDeNo(id);
-    if (!grupoId) return;
+    if (!encontrarNo(id)) return;
 
     if (ctrlKey) {
-      if (estado.selecionadosIds.has(grupoId)) {
-        estado.selecionadosIds.delete(grupoId);
+      if (estado.selecionadosIds.has(id)) {
+        estado.selecionadosIds.delete(id);
       } else {
-        estado.selecionadosIds.add(grupoId);
+        estado.selecionadosIds.add(id);
       }
     } else {
       estado.selecionadosIds.clear();
-      estado.selecionadosIds.add(grupoId);
+      estado.selecionadosIds.add(id);
     }
 
+    aplicarIsolamentoSelecao();
     render();
     emitirSelecao();
   }
 
   function selecionarPorObject3d(object3d, { ctrlKey = false } = {}) {
-    const grupo = estado.grupos.find((g) => g.object3d === object3d);
-    if (!grupo) return;
-    selecionar(grupo.id, { ctrlKey });
+    if (!object3d) return;
+
+    for (const grupo of estado.grupos) {
+      for (const peca of grupo.pecas) {
+        for (const fil of peca.filamentos ?? []) {
+          if (fil.object3d === object3d) {
+            selecionar(fil.id, { ctrlKey });
+            return;
+          }
+        }
+        let dentroDaPeca = peca.object3d === object3d;
+        if (!dentroDaPeca) {
+          peca.object3d.traverse((child) => {
+            if (child === object3d) dentroDaPeca = true;
+          });
+        }
+        if (dentroDaPeca && peca.object3d !== object3d) {
+          for (const fil of peca.filamentos ?? []) {
+            if (fil.object3d === object3d) {
+              selecionar(fil.id, { ctrlKey });
+              return;
+            }
+          }
+        }
+        if (peca.object3d === object3d) {
+          selecionar(peca.id, { ctrlKey });
+          return;
+        }
+      }
+      if (grupo.object3d === object3d) {
+        selecionar(grupo.id, { ctrlKey });
+        return;
+      }
+      let dentroDoGrupo = false;
+      grupo.object3d.traverse((child) => {
+        if (child === object3d) dentroDoGrupo = true;
+      });
+      if (dentroDoGrupo) {
+        selecionar(grupo.id, { ctrlKey });
+        return;
+      }
+    }
   }
 
   function limparSelecao() {
     if (!estado.selecionadosIds.size) return;
     estado.selecionadosIds.clear();
+    restaurarVisibilidadeCompleta();
     render();
     emitirSelecao();
   }
@@ -116,13 +271,42 @@ export function initPainelItems(app) {
 
   function colapsarFilamentos() {
     if (!estado.grupos.length) return;
-    for (const grupo of estado.grupos) grupo.expandido = false;
+    for (const grupo of estado.grupos) {
+      grupo.expandido = false;
+      for (const peca of grupo.pecas) {
+        if (pecaTemSubFilamentos(peca)) peca.filamentosExpandido = false;
+      }
+    }
     render();
   }
 
   function expandirFilamentos() {
     if (!estado.grupos.length) return;
-    for (const grupo of estado.grupos) grupo.expandido = true;
+    for (const grupo of estado.grupos) {
+      grupo.expandido = true;
+      for (const peca of grupo.pecas) {
+        if (pecaTemSubFilamentos(peca)) peca.filamentosExpandido = true;
+      }
+    }
+    render();
+  }
+
+  function encontrarPecaPorId(pecaId) {
+    for (const grupo of estado.grupos) {
+      const peca = grupo.pecas.find((p) => p.id === pecaId);
+      if (peca) return peca;
+    }
+    return null;
+  }
+
+  function pecaTemSubFilamentos(peca) {
+    return (peca?.filamentos?.length ?? 0) >= 2;
+  }
+
+  function alternarFilamentosPeca(pecaId) {
+    const peca = encontrarPecaPorId(pecaId);
+    if (!pecaTemSubFilamentos(peca)) return;
+    peca.filamentosExpandido = !(peca.filamentosExpandido ?? true);
     render();
   }
 
@@ -133,10 +317,21 @@ export function initPainelItems(app) {
     if (no.tipo === 'grupo') {
       no.grupo.visivel = !no.grupo.visivel;
       definirVisibilidade(no.grupo.object3d, no.grupo.visivel);
-      for (const p of no.grupo.pecas) p.visivel = no.grupo.visivel;
+      for (const p of no.grupo.pecas) {
+        p.visivel = no.grupo.visivel;
+        for (const f of p.filamentos ?? []) f.visivel = no.grupo.visivel;
+      }
+    } else if (no.tipo === 'filamento') {
+      no.filamento.visivel = !no.filamento.visivel;
+      definirVisibilidade(no.filamento.object3d, no.filamento.visivel);
+      no.peca.visivel = no.peca.filamentos.some((f) => f.visivel);
     } else {
       no.peca.visivel = !no.peca.visivel;
       definirVisibilidade(no.peca.object3d, no.peca.visivel);
+      for (const f of no.peca.filamentos ?? []) {
+        f.visivel = no.peca.visivel;
+        definirVisibilidade(f.object3d, f.visivel);
+      }
       no.grupo.visivel = no.grupo.pecas.some((p) => p.visivel);
     }
 
@@ -150,11 +345,13 @@ export function initPainelItems(app) {
       return;
     }
 
+    const nomes = [];
     const ids = [...estado.selecionadosIds];
     for (const id of ids) {
       const no = encontrarNo(id);
       if (!no) continue;
       if (no.tipo === 'grupo') {
+        nomes.push(no.grupo.nome);
         removerGrupo(no.grupo.id);
       }
     }
@@ -163,6 +360,12 @@ export function initPainelItems(app) {
     app.onItemsAlterados?.();
     render();
     emitirSelecao();
+
+    if (nomes.length === 1) {
+      app.setStatus?.(`Removido: ${nomes[0]}`);
+    } else if (nomes.length > 1) {
+      app.setStatus?.(`Removidos ${nomes.length} modelos`);
+    }
   }
 
   function removerGrupo(grupoId) {
@@ -199,7 +402,13 @@ export function initPainelItems(app) {
     let linhas = 0;
     for (const grupo of estado.grupos) {
       linhas += 1;
-      if (grupo.expandido !== false) linhas += grupo.pecas.length;
+      if (grupo.expandido === false) continue;
+      for (const peca of grupo.pecas) {
+        linhas += 1;
+        if (peca.filamentos?.length >= 2 && peca.filamentosExpandido !== false) {
+          linhas += peca.filamentos.length;
+        }
+      }
     }
     return linhas;
   }
@@ -237,15 +446,46 @@ export function initPainelItems(app) {
 
         const filhos = grupo.pecas
           .map((peca) => {
-            const sel = estado.selecionadosIds.has(grupo.id);
+            const sel = estado.selecionadosIds.has(peca.id);
             const olho = peca.visivel ? 'fa-eye' : 'fa-eye-slash';
-            return `
-              <div class="painel-items-linha painel-items-linha--filho${sel ? ' is-selecionado' : ''}" data-id="${peca.id}" data-tipo="peca">
-                ${renderSwatchesCores(peca.cores)}
-                <span class="painel-items-nome" title="${escapeHtml(peca.nome)}">${escapeHtml(peca.nome)}</span>
-                <button type="button" class="painel-items-olho" data-vis="${peca.id}" title="Mostrar/ocultar" aria-label="Visibilidade">
-                  <i class="fa-solid ${olho}" aria-hidden="true"></i>
+            const temFilamentos = peca.filamentos?.length >= 2;
+            const expFil = peca.filamentosExpandido !== false;
+            const swatchesPeca = temFilamentos ? '' : renderSwatchesCores(peca.cores);
+
+            const subFilamentos = temFilamentos && expFil
+              ? peca.filamentos
+                  .map((fil) => {
+                    const olhoFil = fil.visivel ? 'fa-eye' : 'fa-eye-slash';
+                    const selFil = estado.selecionadosIds.has(fil.id);
+                    return `
+              <div class="painel-items-linha painel-items-linha--neto${selFil ? ' is-selecionado' : ''}" data-id="${fil.id}" data-tipo="filamento">
+                ${renderSwatchesCores([fil.hex])}
+                <span class="painel-items-nome" title="${escapeHtml(fil.nome)}">${escapeHtml(fil.nome)}</span>
+                <button type="button" class="painel-items-olho" data-vis="${fil.id}" title="Mostrar/ocultar filamento" aria-label="Visibilidade">
+                  <i class="fa-solid ${olhoFil}" aria-hidden="true"></i>
                 </button>
+              </div>`;
+                  })
+                  .join('')
+              : '';
+
+            const chevronFil = temFilamentos
+              ? `<button type="button" class="painel-items-chevron painel-items-chevron--fil${expFil ? ' is-aberto' : ''}" data-expand-fil="${peca.id}" aria-label="Expandir filamentos">
+                  ${expFil ? '▾' : '▸'}
+                </button>`
+              : '<span class="painel-items-chevron-spacer" aria-hidden="true"></span>';
+
+            return `
+              <div class="painel-items-peca-bloco">
+                <div class="painel-items-linha painel-items-linha--filho${sel ? ' is-selecionado' : ''}" data-id="${peca.id}" data-tipo="peca">
+                  ${chevronFil}
+                  ${swatchesPeca}
+                  <span class="painel-items-nome" title="${escapeHtml(peca.nome)}">${escapeHtml(peca.nome)}</span>
+                  <button type="button" class="painel-items-olho" data-vis="${peca.id}" title="Mostrar/ocultar peça" aria-label="Visibilidade">
+                    <i class="fa-solid ${olho}" aria-hidden="true"></i>
+                  </button>
+                </div>
+                ${subFilamentos ? `<div class="painel-items-netos">${subFilamentos}</div>` : ''}
               </div>`;
           })
           .join('');
@@ -266,41 +506,98 @@ export function initPainelItems(app) {
       })
       .join('');
 
-    container.querySelectorAll('[data-expand]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        alternarGrupo(btn.dataset.expand);
-      });
-    });
-
-    container.querySelectorAll('[data-vis]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        alternarVisibilidade(btn.dataset.vis);
-      });
-    });
-
-    container.querySelectorAll('.painel-items-linha[data-id]').forEach((linha) => {
-      linha.addEventListener('click', (event) => {
-        selecionar(linha.dataset.id, { ctrlKey: event.ctrlKey || event.metaKey });
-      });
-    });
-
-    container.querySelectorAll('.painel-items-cor').forEach((sw) => {
-      sw.addEventListener('click', (e) => {
-        e.stopPropagation();
-        app.onCorClicada?.(sw.dataset.hex);
-      });
-    });
-
     atualizarAlturaArvore();
   }
 
+  function ligarEventosArvore() {
+    if (!container || container.dataset.itemsDelegacao === '1') return;
+    container.dataset.itemsDelegacao = '1';
+
+    container.addEventListener('click', (event) => {
+      const olho = event.target.closest('.painel-items-olho');
+      if (olho?.dataset.vis) {
+        event.preventDefault();
+        event.stopPropagation();
+        alternarVisibilidade(olho.dataset.vis);
+        return;
+      }
+
+      const swatch = event.target.closest('.painel-items-cor');
+      if (swatch?.dataset.hex) {
+        event.preventDefault();
+        event.stopPropagation();
+        app.onCorClicada?.(swatch.dataset.hex);
+        return;
+      }
+
+      const expandFil = event.target.closest('[data-expand-fil]');
+      if (expandFil) {
+        event.preventDefault();
+        event.stopPropagation();
+        alternarFilamentosPeca(expandFil.getAttribute('data-expand-fil'));
+        return;
+      }
+
+      const expandGrupo = event.target.closest('[data-expand]');
+      if (expandGrupo) {
+        event.preventDefault();
+        event.stopPropagation();
+        alternarGrupo(expandGrupo.dataset.expand);
+        return;
+      }
+
+      const linha = event.target.closest('.painel-items-linha[data-id]');
+      if (!linha) return;
+
+      if (linha.dataset.tipo === 'peca') {
+        const peca = encontrarPecaPorId(linha.dataset.id);
+        if (pecaTemSubFilamentos(peca) && event.target.closest('.painel-items-chevron--fil')) {
+          event.preventDefault();
+          event.stopPropagation();
+          alternarFilamentosPeca(linha.dataset.id);
+          return;
+        }
+      }
+
+      selecionar(linha.dataset.id, { ctrlKey: event.ctrlKey || event.metaKey });
+    });
+  }
+
+  function sincronizarFilamentosPeca(peca, dadosFilamentos) {
+    if (!dadosFilamentos?.length) return;
+
+    const porUuid = new Map(dadosFilamentos.map((f) => [f.meshUuid, f]));
+    const anteriores = new Map((peca.filamentos ?? []).map((f) => [f.meshUuid, f]));
+
+    peca.filamentos = dadosFilamentos.map((f) => {
+      const prev = anteriores.get(f.meshUuid);
+      return {
+        id: prev?.id ?? crypto.randomUUID(),
+        nome: f.nome,
+        hex: f.hex,
+        meshUuid: f.meshUuid,
+        slot: f.slot,
+        visivel: prev?.visivel ?? true,
+        object3d: prev?.object3d ?? null,
+      };
+    });
+
+    for (const fil of peca.filamentos) {
+      if (fil.object3d) continue;
+      peca.object3d.traverse((child) => {
+        if (child.uuid === fil.meshUuid) fil.object3d = child;
+      });
+    }
+  }
+
   function atualizarCoresPecas(entradas) {
-    const map = new Map((entradas || []).map((e) => [e.id, e.cores || []]));
+    const map = new Map((entradas || []).map((e) => [e.id, e]));
     for (const grupo of estado.grupos) {
       for (const peca of grupo.pecas) {
-        if (map.has(peca.id)) peca.cores = map.get(peca.id);
+        const dados = map.get(peca.id);
+        if (!dados) continue;
+        peca.cores = dados.cores || [];
+        sincronizarFilamentosPeca(peca, dados.filamentos);
       }
     }
     render();
@@ -322,6 +619,16 @@ export function initPainelItems(app) {
         visivel: true,
         object3d: p.object3d,
         cores: p.cores ?? [],
+        filamentosExpandido: true,
+        filamentos: (p.filamentos ?? []).map((f) => ({
+          id: crypto.randomUUID(),
+          nome: f.nome,
+          hex: f.hex,
+          meshUuid: f.meshUuid,
+          slot: f.slot,
+          visivel: true,
+          object3d: f.object3d,
+        })),
       })),
     };
     estado.grupos.push(grupo);
@@ -349,6 +656,7 @@ export function initPainelItems(app) {
   function bindUi() {
     container = document.getElementById('painel-items-arvore');
     fileInput = document.getElementById('items-file-input');
+    ligarEventosArvore();
     let modoAppend = false;
 
     function abrirSeletorFicheiros({ append } = {}) {
@@ -384,6 +692,14 @@ export function initPainelItems(app) {
 
     window.addEventListener('resize', atualizarAlturaArvore);
 
+    document.addEventListener('keydown', (event) => {
+      if (event.target.matches('input, select, textarea, [contenteditable="true"]')) return;
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      if (!estado.selecionadosIds.size) return;
+      event.preventDefault();
+      removerSelecionados();
+    });
+
     return { abrirSeletorFicheiros };
   }
 
@@ -408,5 +724,6 @@ export function initPainelItems(app) {
     selecionar,
     selecionarPorObject3d,
     limparSelecao,
+    removerSelecionados,
   };
 }

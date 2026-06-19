@@ -12,6 +12,10 @@ import {
   slotsFilamentoUsados,
   resolveObjectModelPath,
 } from "../bambu3mfParse.js";
+import {
+  detectarBandejas3mf,
+  filtrarComponentesPorBandeja,
+} from "./bambu-bandejas.js";
 
 const SLOT_CODES = [
   "4", "8", "0C", "1C", "2C", "3C", "4C", "5C", "6C", "7C",
@@ -391,14 +395,20 @@ export function parseBambu3mfBuffer(buffer, options = {}) {
   if (!objectXml) throw new Error(`3MF Bambu: ${objectPath} em falta`);
 
   const components = resolverMontagem(mainModel, objectPath, objectXml, arquivos, options);
+  const bandejas = detectarBandejas3mf(arquivos);
+  const bandejaAlvo = options.bandeja ?? null;
+  const componentsAtivos =
+    bandejaAlvo && bandejas.length > 1
+      ? filtrarComponentesPorBandeja(components, arquivos, bandejaAlvo)
+      : components;
 
   let object;
-  if (components.length > 0) {
+  if (componentsAtivos.length > 0) {
     const partExtruders = parsePartExtruders(modelSettings);
     const partMetadata = parsePartMetadata(modelSettings);
     try {
       object = buildAssemblyGroup(
-        components,
+        componentsAtivos,
         arquivos,
         filamentColours,
         partExtruders,
@@ -411,10 +421,17 @@ export function parseBambu3mfBuffer(buffer, options = {}) {
         slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder)[0] ?? defaultExtruder;
       object = buildColoredGroup(objectXml, filamentColours, extruder);
     }
+  } else if (bandejaAlvo) {
+    throw new Error(`Bandeja ${bandejaAlvo} sem peças neste 3MF.`);
   } else {
     const extruder =
       slotsFilamentoUsados(objectXml, modelSettings, defaultExtruder)[0] ?? defaultExtruder;
     object = buildColoredGroup(objectXml, filamentColours, extruder);
+  }
+
+  if (bandejaAlvo) {
+    object.name = `Bandeja ${bandejaAlvo}`;
+    object.userData.bandeja = bandejaAlvo;
   }
 
   return {
@@ -424,6 +441,8 @@ export function parseBambu3mfBuffer(buffer, options = {}) {
       filamentTypes: parseFilamentTypes(projectSettings),
       suportes: object.userData?.suportesBambu ?? 0,
       bambuImpressao: extrairMetadadosBambu(projectSettings),
+      bandejas,
+      bandejaAtiva: bandejaAlvo,
     },
   };
 }
