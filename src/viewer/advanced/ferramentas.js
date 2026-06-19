@@ -387,7 +387,11 @@ export function initFerramentas(app) {
 
   function aplicarFiltroCor(hex) {
     if (!app.getCurrentModel()) return;
-    estado.filtroCor = estado.filtroCor === hex ? null : hex;
+    if (hex === null) {
+      estado.filtroCor = null;
+    } else {
+      estado.filtroCor = estado.filtroCor === hex ? null : hex;
+    }
 
     app.getCurrentModel().traverse((c) => {
       if (!c.isMesh) return;

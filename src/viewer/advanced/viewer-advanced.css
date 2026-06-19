@@ -416,6 +416,214 @@ input[type="file"] {
   border-color: var(--va-success);
 }
 
+.cores-filamento-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cores-filamento-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.cores-filamento-linha.is-customizada .cores-filamento-rotulo {
+  color: var(--va-accent);
+}
+
+.cores-filamento-rotulo {
+  font-size: 11px;
+  color: var(--va-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cores-filamento-acoes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cores-filamento-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--va-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--va-text-muted);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.cores-filamento-btn:hover {
+  color: var(--va-text);
+  border-color: var(--va-accent);
+  background: rgba(232, 163, 23, 0.1);
+}
+
+.seletor-cor-popover {
+  position: absolute;
+  z-index: 40;
+  width: 220px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(22, 22, 26, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seletor-cor-popover.hidden {
+  display: none;
+}
+
+.seletor-cor-sv {
+  position: relative;
+  width: 100%;
+  height: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.seletor-cor-sv-white,
+.seletor-cor-sv-black {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.seletor-cor-sv-white {
+  background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+
+.seletor-cor-sv-black {
+  background: linear-gradient(to top, #000, rgba(0, 0, 0, 0));
+}
+
+.seletor-cor-cursor,
+.seletor-cor-hue-cursor {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.seletor-cor-cursor {
+  z-index: 2;
+}
+
+.seletor-cor-hue {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.seletor-cor-hue-cursor {
+  top: 50%;
+}
+
+.seletor-cor-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seletor-cor-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.seletor-cor-hex-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.seletor-cor-hex-titulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.seletor-cor-hex-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--va-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--va-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.seletor-cor-hex-input:focus {
+  outline: none;
+  border-color: var(--va-accent);
+}
+
+.cores-modelo-restaurar {
+  margin-top: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--va-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--va-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.cores-modelo-restaurar:hover {
+  color: var(--va-text);
+  border-color: var(--va-accent);
+}
+
+.cores-modelo-restaurar.hidden {
+  display: none;
+}
+
 .cores-modelo-contagem {
   font-size: 12px;
   color: var(--va-text-muted);

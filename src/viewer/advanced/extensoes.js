@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Extensões do visualizador: formatos, export, etc.
  */
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";

@@ -16,7 +16,18 @@ import * as THREE from "three";
     import { analisarFilamentosBambu } from "../viewer/advanced/bambu-3mf.js";
     import { initPainelItems, nomeGrupoImportacao } from "../viewer/advanced/painel-items.js";
     import { renderViewerAsideNav } from "../layout/header.js";
-    import { extrairCoresDoObject, metaBambuDoObject, extrairCoresDo3mfBuffer, materialFilamentoBambu, aplicarPolygonOffsetFilamento } from "../viewer/advanced/cores-modelo.js";
+    import { extrairCoresDoObject, metaBambuDoObject, extrairCoresDo3mfBuffer, materialFilamentoBambu, aplicarPolygonOffsetFilamento, normalizarHexCor } from "../viewer/advanced/cores-modelo.js";
+    import {
+      limparEditorCores,
+      registarCoresOriginais,
+      listarFilamentosEditaveis,
+      aplicarCorMesh,
+      restaurarCorMesh,
+      restaurarTodasCores,
+      aplicarOverrideMaterial,
+      temCustomizacoesCores,
+    } from "../viewer/advanced/editor-cores.js";
+    import { criarSeletorCor } from "../viewer/advanced/seletor-cor.js";
     import { detectarPecasSeparaveis } from "../viewer/advanced/pecas-modelo.js";
 
 (async () => {
@@ -37,6 +48,8 @@ import * as THREE from "three";
     let currentModel = null;
     let itensSelecionados3d = [];
     let helpersSelecao = [];
+    const seletorCor = criarSeletorCor();
+    let meshUuidPickerAberto = null;
     const materiaisOriginais = new Map();
     const meshComCorVertice = new Set();
     const COR_PADRAO = 0xe8a317;
@@ -547,6 +560,7 @@ import * as THREE from "three";
         materiaisOriginais.clear();
         meshComCorVertice.clear();
         limparCoresModelo();
+        limparEditorCores();
         ferramentas?.onModelCleared();
         extensoes?.onModelCleared();
         secaoFilamentosCache = null;
@@ -1360,10 +1374,20 @@ import * as THREE from "three";
       return clone;
     }
 
+    function encontrarMeshPorUuid(uuid) {
+      if (!currentModel || !uuid) return null;
+      let found = null;
+      currentModel.traverse((c) => {
+        if (c.uuid === uuid) found = c;
+      });
+      return found;
+    }
+
     function salvarEstadoVisual(object, { append = false } = {}) {
       if (!append) {
         materiaisOriginais.clear();
         meshComCorVertice.clear();
+        limparEditorCores();
       }
 
       object.traverse((child) => {
@@ -1384,6 +1408,8 @@ import * as THREE from "three";
           lista.map((material) => clonarMaterial(material, child.geometry))
         );
       });
+
+      registarCoresOriginais(object);
     }
 
     function aplicarVisual(object) {
@@ -1402,6 +1428,7 @@ import * as THREE from "three";
             for (const chave of ["map", "emissiveMap", "specularMap"]) {
               if (mat[chave]) mat[chave].colorSpace = THREE.SRGBColorSpace;
             }
+            aplicarOverrideMaterial(child, mat);
             return mat;
           });
           child.material = clonados.length === 1 ? clonados[0] : clonados;
@@ -1411,6 +1438,7 @@ import * as THREE from "three";
         const metaBambu = metaBambuDoObject(child);
         const matBambu = materialFilamentoBambu(child, metaBambu);
         if (matBambu) {
+          aplicarOverrideMaterial(child, matBambu);
           child.material = matBambu;
           return;
         }
@@ -1448,6 +1476,7 @@ import * as THREE from "three";
           id: peca.id,
           nome: peca.nome,
           cores: extrairCoresDoObject(peca.object3d, meta),
+          filamentos: listarFilamentosEditaveis(peca.object3d, meta),
         };
       });
     }
@@ -1461,25 +1490,122 @@ import * as THREE from "three";
             id: peca.id,
             nome: peca.nome,
             cores: extrairCoresDoObject(peca.object3d, meta),
+            filamentos: listarFilamentosEditaveis(peca.object3d, meta),
           });
         }
       }
       return entradas;
     }
 
-    function ligarCliqueCorSwatch(sw) {
-      sw.addEventListener("click", async () => {
-        const hex = sw.dataset.hex;
-        ferramentas?.aplicarFiltroCor(hex);
-        try {
-          await navigator.clipboard.writeText(hex);
-          sw.classList.add("copiado");
-          setStatus(`Cor ${hex} copiada`);
-          setTimeout(() => sw.classList.remove("copiado"), 800);
-        } catch {
-          setStatus(`Cor selecionada: ${hex}`);
-        }
+    function rotuloFilamentoEditor(f) {
+      if (f.nome === "Cor do modelo") return f.nome;
+      if (f.nome && !/^Filamento \d+$/.test(f.nome)) {
+        return f.slot ? `Fil. ${f.slot} · ${f.nome}` : f.nome;
+      }
+      return f.slot ? `Filamento ${f.slot}` : f.nome;
+    }
+
+    function renderFilamentoLinha(f) {
+      const rotulo = rotuloFilamentoEditor(f);
+      return `
+        <div class="cores-filamento-linha${f.customizada ? " is-customizada" : ""}" data-mesh-uuid="${f.meshUuid}">
+          <span class="cores-filamento-rotulo" title="${escapeHtmlTexto(f.hex)}">${escapeHtmlTexto(rotulo)}</span>
+          <div class="cores-filamento-acoes">
+            <span class="cor-modelo-swatch" data-hex="${f.hex}" data-mesh-uuid="${f.meshUuid}" style="background-color:${f.hex}" title="Clique para filtrar"></span>
+            <button type="button" class="cores-filamento-btn cores-filamento-btn--picker" title="Alterar cor" aria-label="Alterar cor">
+              <i class="fa-solid fa-palette" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="cores-filamento-btn cores-filamento-btn--reset${f.customizada ? "" : " hidden"}" title="Restaurar cor original" aria-label="Restaurar cor original">
+              <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>`;
+    }
+
+    function actualizarSwatchDom(meshUuid, hex) {
+      document.querySelectorAll(`.cor-modelo-swatch[data-mesh-uuid="${meshUuid}"]`).forEach((sw) => {
+        sw.style.backgroundColor = hex;
+        sw.dataset.hex = hex;
       });
+      const linha = document.querySelector(`.cores-filamento-linha[data-mesh-uuid="${meshUuid}"]`);
+      linha?.classList.add("is-customizada");
+      linha?.querySelector(".cores-filamento-btn--reset")?.classList.remove("hidden");
+      linha?.querySelector(".cores-filamento-rotulo")?.setAttribute("title", hex);
+    }
+
+    function alterarCorFilamento(meshUuid, hex, { refreshPainel = true } = {}) {
+      const mesh = encontrarMeshPorUuid(meshUuid);
+      if (!mesh || !aplicarCorMesh(mesh, hex, materiaisOriginais)) return false;
+      actualizarSwatchDom(meshUuid, normalizarHexCor(hex) || hex);
+      if (refreshPainel) {
+        ferramentas?.aplicarFiltroCor(null);
+        atualizarCoresUi();
+        setStatus(`Cor alterada: ${normalizarHexCor(hex) || hex}`);
+      }
+      return true;
+    }
+
+    function restaurarCorFilamento(meshUuid) {
+      const mesh = encontrarMeshPorUuid(meshUuid);
+      if (!mesh || !restaurarCorMesh(mesh, materiaisOriginais)) return false;
+      ferramentas?.aplicarFiltroCor(null);
+      atualizarCoresUi();
+      setStatus("Cor restaurada");
+      return true;
+    }
+
+    function abrirPickerCor(linha, meshUuid) {
+      const swatch = linha?.querySelector(".cor-modelo-swatch");
+      const hexAtual = swatch?.dataset.hex || "#FFFFFF";
+      const anchor = linha?.querySelector(".cores-filamento-btn--picker") || swatch;
+      meshUuidPickerAberto = meshUuid;
+
+      seletorCor.abrir({
+        anchor,
+        hexInicial: hexAtual,
+        onChange: (hex) => alterarCorFilamento(meshUuid, hex, { refreshPainel: false }),
+        onClose: () => {
+          if (meshUuidPickerAberto) {
+            ferramentas?.aplicarFiltroCor(null);
+            atualizarCoresUi();
+            const hex = document.querySelector(
+              `.cor-modelo-swatch[data-mesh-uuid="${meshUuidPickerAberto}"]`
+            )?.dataset.hex;
+            if (hex) setStatus(`Cor aplicada: ${hex}`);
+          }
+          meshUuidPickerAberto = null;
+        },
+      });
+    }
+
+    function ligarEventosPainelCores(container) {
+      container.querySelectorAll(".cores-filamento-linha").forEach((linha) => {
+        const meshUuid = linha.dataset.meshUuid;
+        if (!meshUuid) return;
+        const swatch = linha.querySelector(".cor-modelo-swatch");
+        const picker = linha.querySelector(".cores-filamento-btn--picker");
+        const reset = linha.querySelector(".cores-filamento-btn--reset");
+
+        swatch?.addEventListener("click", () => {
+          ferramentas?.aplicarFiltroCor(swatch.dataset.hex);
+        });
+
+        picker?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          abrirPickerCor(linha, meshUuid);
+        });
+
+        reset?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          seletorCor.fechar();
+          restaurarCorFilamento(meshUuid);
+        });
+      });
+
+      document.getElementById("cores-modelo-restaurar-todas")?.classList.toggle(
+        "hidden",
+        !temCustomizacoesCores()
+      );
     }
 
     function renderizarPainelCores(entradas) {
@@ -1498,7 +1624,7 @@ import * as THREE from "three";
 
       wrap.classList.remove("hidden");
 
-      const comCor = entradas.filter((e) => e.cores.length);
+      const comCor = entradas.filter((e) => e.filamentos?.length || e.cores.length);
       if (!comCor.length) {
         row.innerHTML = "";
         contagem.textContent = "";
@@ -1507,34 +1633,44 @@ import * as THREE from "three";
             ? "Este ficheiro não contém dados de cor (apenas geometria)."
             : `${entradas.length} ficheiros sem dados de cor nos arquivos.`;
         vazio.classList.remove("hidden");
+        document.getElementById("cores-modelo-restaurar-todas")?.classList.add("hidden");
         return;
       }
 
       vazio.classList.add("hidden");
       row.innerHTML = comCor
-        .map(
-          (entrada) => `
+        .map((entrada) => {
+          const linhas = entrada.filamentos?.length
+            ? entrada.filamentos.map(renderFilamentoLinha).join("")
+            : entrada.cores
+                .map(
+                  (hex) => `
+              <div class="cores-filamento-linha" data-mesh-uuid="">
+                <span class="cores-filamento-rotulo">${escapeHtmlTexto(hex)}</span>
+                <div class="cores-filamento-acoes">
+                  <span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="Clique para filtrar"></span>
+                </div>
+              </div>`
+                )
+                .join("");
+          return `
         <div class="cores-modelo-item">
           <span class="cores-modelo-item-nome" title="${escapeHtmlTexto(entrada.nome)}">${escapeHtmlTexto(nomeCurtoFicheiro(entrada.nome))}</span>
-          <div class="cores-modelo-item-swatches">
-            ${entrada.cores
-              .map(
-                (hex) =>
-                  `<span class="cor-modelo-swatch" data-hex="${hex}" style="background-color:${hex}" title="${escapeHtmlTexto(entrada.nome)} — ${hex}"></span>`
-              )
-              .join("")}
-          </div>
-        </div>`
-        )
+          <div class="cores-filamento-lista">${linhas}</div>
+        </div>`;
+        })
         .join("");
 
-      row.querySelectorAll(".cor-modelo-swatch").forEach(ligarCliqueCorSwatch);
+      ligarEventosPainelCores(row);
 
-      const totalCores = comCor.reduce((n, e) => n + e.cores.length, 0);
+      const totalCores = comCor.reduce(
+        (n, e) => n + (e.filamentos?.length || e.cores.length),
+        0
+      );
       contagem.textContent =
         comCor.length === 1
-          ? `${totalCores} cor · clique para filtrar`
-          : `${comCor.length} ficheiros · ${totalCores} cores · clique para filtrar`;
+          ? `${totalCores} cor · clique filtrar · paleta para editar`
+          : `${comCor.length} ficheiros · ${totalCores} cores · paleta para editar`;
     }
 
     function atualizarCoresUi() {
@@ -1567,6 +1703,7 @@ import * as THREE from "three";
       document.getElementById("cores-modelo").innerHTML = "";
       document.getElementById("cores-modelo-contagem").textContent = "";
       document.getElementById("cores-modelo-vazio").classList.add("hidden");
+      document.getElementById("cores-modelo-restaurar-todas")?.classList.add("hidden");
     }
 
     function apresentarImportacao({ importGroups, arquivoMeta, extras = {}, append = false }) {
@@ -1937,6 +2074,13 @@ import * as THREE from "three";
       },
     });
     painelItems.bindUi();
+
+    document.getElementById("cores-modelo-restaurar-todas")?.addEventListener("click", () => {
+      const n = restaurarTodasCores(currentModel, materiaisOriginais);
+      ferramentas?.aplicarFiltroCor(null);
+      atualizarCoresUi();
+      setStatus(n ? `${n} cor(es) restaurada(s)` : "Nenhuma cor personalizada");
+    });
 
     function initImportacaoPorArrastar() {
       const viewer = document.querySelector(".viewer");
