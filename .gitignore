@@ -10,4 +10,7 @@ auth.users.json
 .env.*
 !.env.example
 
-.vercel
+# Modelos pesados — a loja usa 3MF; STL/RAR ficam só em local
+public/products/**/*.stl
+public/products/**/*.rar
+.cursor/

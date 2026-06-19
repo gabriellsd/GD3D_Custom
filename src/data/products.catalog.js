@@ -1,6 +1,28 @@
 // Gerado automaticamente por npm run products:sync — não editar à mão.
 export const CATALOG_PRODUCTS = [
   {
+  id: 6,
+  category: "Futebol",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-cube",
+  desc: "Produto Corinthians. Edite info.txt nesta pasta.",
+  tag: "Produto",
+  model3mfUrl: "/products/Futebol/Corinthians/gaviao_do_corinthians.3mf",
+  colors: ["#000000", "#FFFFFF", "#FEC600", "#8E9089"]
+  },
+  {
+  id: 7,
+  category: "Futebol",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-cube",
+  desc: "Produto Palmeiras. Edite info.txt nesta pasta.",
+  tag: "Produto",
+  model3mfUrl: "/products/Futebol/Palmeiras/mascote_do_palmeiras.3mf",
+  colors: ["#FFFFFF", "#000000", "#F8EDDE", "#3F8E43"]
+  },
+  {
   id: 3,
   category: "Miniaturas",
   name: "Coruja de Tricô Decorativa 6cm - Impressão 3D",
@@ -37,6 +59,42 @@ export const CATALOG_PRODUCTS = [
   card3mfFacing: 0
   },
   {
+  id: 8,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Banguela. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Figuras",
+  model3mfUrl: "/products/Miniaturas/Figuras/Banguela/Drag%C3%A3o%20Banguela.3mf",
+  colors: ["#00FF40", "#161616", "#C12E1F", "#FFFFFF"]
+  },
+  {
+  id: 9,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Patolino. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Figuras",
+  model3mfUrl: "/products/Miniaturas/Figuras/Patolino/patolino_batman.3mf",
+  colors: ["#FFFFFF", "#000000", "#F98C36"]
+  },
+  {
+  id: 10,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Sonic. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Figuras",
+  model3mfUrl: "/products/Miniaturas/Figuras/Sonic/Sonic%20x%20Wolverine%20-%20Multicolor.3mf",
+  colors: ["#000000", "#F7E6DE", "#FEC600"]
+  },
+  {
   id: 4,
   category: "Miniaturas",
   name: "Mewtwo Decorativo 15cm - Impressão 3D",
@@ -49,7 +107,7 @@ export const CATALOG_PRODUCTS = [
   previewImages: ["/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-1.png", "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-2.png", "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/view-3w.png"],
   modelUrl: "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/Mewtwo.stl",
   model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/mewtwo-decorativo-15cm-impressao-3d/Mewtwo_Multicolor.3mf",
-  colors: ["#8000FF"],
+  colors: ["#8B06F9"],
   sizes: ["15 cm"],
   featured: false,
   featuredOrder: 3,
@@ -109,5 +167,81 @@ export const CATALOG_PRODUCTS = [
     z: 0
   },
   card3mfFacing: 0
+  },
+  {
+  id: 11,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Blastoise Multicolor. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Pokemón",
+  modelUrl: "/products/Miniaturas/Pokem%C3%B3n/blastoise_multicolor/blastoise_multicolor.stl",
+  model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/blastoise_multicolor/blastoise_multicolor.3mf",
+  colors: ["#0080FF"]
+  },
+  {
+  id: 12,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Eevee Multicolor. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Pokemón",
+  modelUrl: "/products/Miniaturas/Pokem%C3%B3n/eevee-multicolor/eevee_multicolor.stl",
+  model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/eevee-multicolor/eevee_multicolor.3mf",
+  colors: ["#FFFFFF", "#FEEF9C", "#725E49", "#B77442", "#D78E3E", "#232323"]
+  },
+  {
+  id: 13,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Gecqua Decorativo Impressao 3d. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Pokemón",
+  modelUrl: "/products/Miniaturas/Pokem%C3%B3n/gecqua-decorativo-impressao-3d/gecqua.stl",
+  model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/gecqua-decorativo-impressao-3d/gecqua.3mf",
+  colors: ["#0080FF", "#000000", "#FFFFFF", "#80FFFF"]
+  },
+  {
+  id: 14,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Pikachu Cosplay Bulbasaur. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Pokemón",
+  modelUrl: "/products/Miniaturas/Pokem%C3%B3n/pikachu-cosplay-bulbasaur/pikachu%20cosplay%20bulba.stl",
+  model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/pikachu-cosplay-bulbasaur/pikachu%20cosplay%20bulba.3mf",
+  colors: ["#008080", "#000000", "#FFFF80", "#FFFFFF", "#008040", "#FF0000", "#6D823E"]
+  },
+  {
+  id: 15,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Umbreon Multicolor. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Pokemón",
+  model3mfUrl: "/products/Miniaturas/Pokem%C3%B3n/umbreon_multicolor/Umbreon_Multicolor.3mf",
+  colors: ["#000000", "#FFFF00", "#FFFFFF", "#FF0000"]
+  },
+  {
+  id: 16,
+  category: "Miniaturas",
+  name: "Sem nome no info.txt",
+  price: 0,
+  icon: "fa-solid fa-chess-knight",
+  desc: "Produto Banguela Urbano. Edite info.txt nesta pasta.",
+  tag: "Miniaturas",
+  subcategory: "Urban 3D",
+  model3mfUrl: "/products/Miniaturas/Urban%203D/Banguela%20Urbano/Banguela%20Urbano%20sem%20AMS-cores.3mf",
+  colors: ["#C12E1F"]
   }
 ];
