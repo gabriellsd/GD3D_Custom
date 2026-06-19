@@ -1,4 +1,5 @@
 /* Visualizador técnico — alinhado ao design GD3D */
+@import "../../shared/product-form.css";
 
 .viewer-advanced-main {
   --va-bg: #080808;
@@ -1109,7 +1110,7 @@ body:fullscreen .viewer-advanced-toolbar {
 }
 
 .input-linha textarea {
-  min-height: 4.5rem;
+  min-height: 5.5rem;
   resize: vertical;
   line-height: 1.45;
 }
@@ -1117,7 +1118,128 @@ body:fullscreen .viewer-advanced-toolbar {
 .publicar-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  --produto-form-border: var(--va-border);
+  --produto-form-surface: rgba(255, 255, 255, 0.02);
+  --produto-form-field-bg: var(--va-surface);
+  --produto-form-text: var(--va-text);
+  --produto-form-muted: var(--va-text-muted);
+  --produto-form-accent: var(--va-accent);
+  --produto-form-accent-bg: rgba(232, 163, 23, 0.08);
+}
+
+.publicar-form.publicar-saving {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.toggle-linha--compact {
+  margin-top: 2px;
+}
+
+#secao-publicar.publicar-pronto .publicar-hint {
+  display: none;
+}
+
+.barra-grupo-tool--solo.hidden {
+  display: none;
+}
+
+.barra-grupo-tool--solo .barra-grupo-trigger--accent i {
+  color: var(--va-accent);
+}
+
+.barra-grupo-tool--solo:hover .barra-grupo-trigger--accent,
+.barra-grupo-tool--solo:focus-within .barra-grupo-trigger--accent {
+  background: rgba(232, 163, 23, 0.18);
+  border-color: var(--va-accent);
+  color: #fff;
+}
+
+.modal-publicar {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-publicar.hidden {
+  display: none;
+}
+
+.modal-publicar-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.modal-publicar-painel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 888px);
+  max-height: min(92vh, 900px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pub-editor-panel {
+  --produto-form-border: #334155;
+  --produto-form-surface: rgba(15, 23, 42, 0.5);
+  --produto-form-field-bg: #020617;
+  --produto-form-text: #e2e8f0;
+  --produto-form-muted: #64748b;
+  --produto-form-accent: #e8a317;
+  --produto-form-accent-bg: rgba(232, 163, 23, 0.08);
+}
+
+.pub-editor-panel .publicar-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pub-editor-panel #secao-publicar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pub-editor-panel .admin-tab-panel.is-active {
+  overflow-y: auto;
+  max-height: min(52vh, 520px);
+}
+
+.modal-publicar-fechar {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.modal-publicar-fechar:hover {
+  background: rgba(30, 41, 59, 0.95);
+  color: #fff;
 }
 
 .publicar-form.publicar-saving {
@@ -1127,6 +1249,14 @@ body:fullscreen .viewer-advanced-toolbar {
 
 #secao-publicar.publicar-pronto .publicar-hint {
   display: none;
+}
+
+.publicar-status:empty {
+  display: none;
+}
+
+body.modal-publicar-aberto {
+  overflow: hidden;
 }
 
 .publicar-links {

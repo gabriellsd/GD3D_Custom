@@ -24,6 +24,11 @@ export function storageObjectPath({ category, subcategory, slug }, fileName) {
   return `${parts.join('/')}/${asciiStorageSegment(fileName)}`;
 }
 
+/** Nome padrão das imagens de preview na pasta do produto (view-0.png = capa). */
+export function previewImageFileName(index) {
+  return `view-${index}.png`;
+}
+
 export function rowToProduct(row) {
   if (!row) return null;
   const product = {

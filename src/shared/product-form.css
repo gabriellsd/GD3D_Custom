@@ -1,0 +1,205 @@
+/* Bloco partilhado — formulário de produto (admin + publicar) */
+
+.produto-form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 480px) {
+  .produto-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.produto-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.produto-form-field--full {
+  grid-column: 1 / -1;
+}
+
+.produto-form-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--produto-form-muted, #94a3b8);
+}
+
+.produto-form-field input,
+.produto-form-field textarea,
+.produto-form-field select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--produto-form-border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  background: var(--produto-form-field-bg, rgba(0, 0, 0, 0.25));
+  color: var(--produto-form-text, #e2e8f0);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+
+.produto-form-field input:focus,
+.produto-form-field textarea:focus,
+.produto-form-field select:focus {
+  outline: none;
+  border-color: var(--produto-form-accent, #e8a317);
+}
+
+.produto-form-field textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.produto-form-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem 1.5rem;
+  padding-top: 4px;
+}
+
+.produto-form-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--produto-form-border, rgba(255, 255, 255, 0.12));
+}
+
+.produto-form-footer .atalhos {
+  margin: 0;
+  font-size: 11px;
+  color: var(--produto-form-muted, #94a3b8);
+}
+
+.produto-imagens-bloco {  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--produto-form-border, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: var(--produto-form-surface, rgba(255, 255, 255, 0.02));
+}
+
+.produto-imagens-titulo {
+  font-size: 12px;
+  color: var(--produto-form-muted, #94a3b8);
+}
+
+.produto-imagens-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--produto-form-muted, #94a3b8);
+}
+
+.produto-imagens-hint strong {
+  color: var(--produto-form-text, #e2e8f0);
+  font-weight: 600;
+}
+
+.produto-imagens-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--produto-form-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  color: var(--produto-form-muted, #94a3b8);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.produto-imagens-drop:hover {
+  border-color: var(--produto-form-accent, #e8a317);
+  color: var(--produto-form-text, #fff);
+  background: var(--produto-form-accent-bg, rgba(232, 163, 23, 0.08));
+}
+
+.produto-imagens-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.produto-imagens-lista:empty {
+  display: none;
+}
+
+.produto-imagens-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--produto-form-field-bg, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--produto-form-border, rgba(255, 255, 255, 0.12));
+}
+
+.produto-imagens-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111;
+}
+
+.produto-imagens-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.produto-imagens-nome {
+  font-size: 11px;
+  color: var(--produto-form-text, #e2e8f0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.produto-imagens-destino {
+  font-size: 10px;
+  color: var(--produto-form-accent, #e8a317);
+}
+
+.produto-imagens-remover {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--produto-form-muted, #94a3b8);
+  cursor: pointer;
+}
+
+.produto-imagens-remover:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.produto-form-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--produto-form-muted, #94a3b8);
+  margin: 4px 0 0;
+}

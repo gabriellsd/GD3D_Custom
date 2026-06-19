@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
@@ -32,10 +32,10 @@
               <button type="button" id="items-btn-abrir" class="painel-items-btn" title="Abrir modelos (acumula na cena · Shift: substituir tudo)">
                 <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
               </button>
-              <button type="button" id="items-btn-remover" class="painel-items-btn" title="Remover selecionado">
+              <button type="button" id="items-btn-remover" class="painel-items-btn" title="Minimizar filamentos">
                 <i class="fa-solid fa-square-minus" aria-hidden="true"></i>
               </button>
-              <button type="button" id="items-btn-adicionar" class="painel-items-btn" title="Adicionar modelos à cena">
+              <button type="button" id="items-btn-adicionar" class="painel-items-btn" title="Maximizar filamentos">
                 <i class="fa-solid fa-square-plus" aria-hidden="true"></i>
               </button>
             </div>
@@ -63,61 +63,6 @@
                 <span>Camada</span>
                 <input type="range" id="slider-gcode-camada" min="0" max="100" step="1" value="100" />
               </div>
-            </div>
-          </div>
-
-          <div class="info-section" id="secao-publicar">
-            <button type="button" class="info-section-header" aria-expanded="false">
-              <span class="info-chevron">▸</span>Publicar no site
-            </button>
-            <div class="info-section-body painel-opcoes-body">
-              <p class="info-vazio publicar-hint">Carregue um modelo 3D para criar um produto na loja.</p>
-              <form id="form-publicar-produto" class="publicar-form">
-                <label class="input-linha">
-                  <span>Nome do produto</span>
-                  <input id="pub-name" name="name" required placeholder="Ex.: Coruja decorativa 6 cm" />
-                </label>
-                <label class="input-linha">
-                  <span>Categoria</span>
-                  <input name="category" value="Miniaturas" required list="pub-categories" />
-                </label>
-                <label class="input-linha">
-                  <span>Subcategoria</span>
-                  <input name="subcategory" list="pub-subcategories" placeholder="Animais" />
-                </label>
-                <label class="input-linha">
-                  <span>Slug (pasta no storage)</span>
-                  <input id="pub-slug" name="slug" required />
-                </label>
-                <label class="input-linha">
-                  <span>Preço (R$)</span>
-                  <input name="price" type="number" step="0.01" min="0" placeholder="49.90" />
-                </label>
-                <label class="input-linha">
-                  <span>Tamanhos (vírgula)</span>
-                  <input name="sizes" placeholder="6 cm, 15 cm" />
-                </label>
-                <label class="input-linha">
-                  <span>Descrição</span>
-                  <textarea id="pub-desc" name="desc" rows="3" placeholder="Texto curto para a loja"></textarea>
-                </label>
-                <label class="toggle-linha">
-                  <span>Publicado na loja</span>
-                  <input type="checkbox" name="published" />
-                  <span class="toggle-ui"></span>
-                </label>
-                <label class="toggle-linha">
-                  <span>Destaque na home</span>
-                  <input type="checkbox" name="featured" />
-                  <span class="toggle-ui"></span>
-                </label>
-                <p class="atalhos">Envia o ficheiro atual + captura da cena como imagem da loja.</p>
-                <button type="submit" id="btn-publicar-produto" class="btn btn-primary" disabled>
-                  <i class="fa-solid fa-cloud-arrow-up"></i>
-                  Publicar na loja
-                </button>
-                <div id="publicar-status" class="publicar-status"></div>
-              </form>
             </div>
           </div>
 
@@ -160,6 +105,137 @@
           <p class="loading-text">Carregando...</p>
         </div>
         <div id="status" class="status">Pronto</div>
+
+        <div id="modal-publicar" class="modal-publicar hidden" role="dialog" aria-modal="true" aria-labelledby="pub-editor-title">
+          <div class="modal-publicar-backdrop" data-fechar-modal="true"></div>
+          <div class="modal-publicar-painel admin-panel pub-editor-panel">
+            <button type="button" class="modal-publicar-fechar" aria-label="Fechar">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+
+            <div class="admin-panel-header">
+              <div class="flex gap-4 min-w-0">
+                <img id="pub-hero-img" class="admin-preview-hero hidden" alt="" />
+                <div id="pub-hero-placeholder" class="admin-preview-hero flex items-center justify-center text-slate-600 text-3xl border border-dashed border-slate-700">
+                  <i class="fa-solid fa-image" aria-hidden="true"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">A editar</p>
+                  <h2 id="pub-editor-title" class="text-xl font-extrabold text-white truncate mt-0.5">Novo produto</h2>
+                  <p id="pub-editor-meta" class="text-xs text-slate-500 mt-1 truncate">—</p>
+                </div>
+              </div>
+            </div>
+
+            <nav class="admin-tabs" role="tablist">
+              <button type="button" class="admin-tab is-active" data-tab="geral">Geral</button>
+              <button type="button" class="admin-tab" data-tab="loja">Loja</button>
+              <button type="button" class="admin-tab" data-tab="ficheiros">Ficheiros</button>
+            </nav>
+
+            <div id="secao-publicar">
+              <p class="info-vazio publicar-hint px-6 sm:px-8 pt-6">Carregue um modelo 3D para criar um produto na loja.</p>
+              <form id="form-publicar-produto" class="publicar-form">
+                <div class="admin-tab-panel is-active" data-panel="geral">
+                  <div class="produto-form-grid">
+                    <div class="produto-form-field produto-form-field--full">
+                      <label for="pub-name">Nome do produto</label>
+                      <input id="pub-name" name="name" required placeholder="Ex.: Coruja decorativa 6 cm" />
+                    </div>
+                    <div class="produto-form-field">
+                      <label for="pub-price">Preço (R$)</label>
+                      <input id="pub-price" name="price" type="number" step="0.01" min="0" placeholder="49.90" />
+                    </div>
+                    <div class="produto-form-field">
+                      <label for="pub-sizes">Tamanhos (separados por vírgula)</label>
+                      <input id="pub-sizes" name="sizes" placeholder="6 cm, 15 cm" />
+                    </div>
+                    <div class="produto-form-field">
+                      <label for="pub-category">Categoria</label>
+                      <input id="pub-category" name="category" value="Miniaturas" required list="pub-categories" placeholder="Miniaturas" />
+                    </div>
+                    <div class="produto-form-field">
+                      <label for="pub-subcategory">Subcategoria</label>
+                      <input id="pub-subcategory" name="subcategory" list="pub-subcategories" placeholder="Animais" autocomplete="off" />
+                    </div>
+                    <div class="produto-form-field produto-form-field--full">
+                      <label for="pub-slug">Slug (pasta no storage)</label>
+                      <input id="pub-slug" name="slug" required />
+                      <p class="produto-form-hint">Gerado automaticamente a partir do nome.</p>
+                    </div>
+                    <div class="produto-form-field produto-form-field--full">
+                      <label for="pub-desc">Descrição</label>
+                      <textarea id="pub-desc" name="desc" rows="4"></textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="admin-tab-panel" data-panel="loja">
+                  <div class="produto-form-grid">
+                    <div class="produto-form-field">
+                      <label for="pub-tag">Etiqueta (tag)</label>
+                      <input id="pub-tag" name="tag" placeholder="Miniaturas" />
+                    </div>
+                    <div class="produto-form-field">
+                      <label for="pub-icon">Ícone Font Awesome</label>
+                      <input id="pub-icon" name="icon" placeholder="fa-solid fa-crow" />
+                    </div>
+                    <div class="produto-form-field produto-form-field--full produto-form-toggles">
+                      <label class="inline-flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
+                        <input type="checkbox" name="published" class="rounded border-slate-600 text-brand-500 focus:ring-brand-500" />
+                        Publicado na loja
+                      </label>
+                      <label class="inline-flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
+                        <input type="checkbox" name="featured" class="rounded border-slate-600 text-brand-500 focus:ring-brand-500" />
+                        Destaque na home
+                      </label>
+                      <div class="inline-flex items-center gap-2 text-sm text-slate-300">
+                        <span class="text-slate-400">Ordem destaque</span>
+                        <input name="featuredOrder" type="number" min="0" value="0" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="admin-tab-panel" data-panel="ficheiros">
+                  <p class="text-sm text-slate-400 mb-4">Ficheiros no Supabase Storage. A loja prefere 3MF para o preview 3D.</p>
+
+                  <div class="produto-imagens-bloco mb-6" id="pub-imagens-wrap">
+                    <label class="text-sm font-semibold text-white">Imagens da loja</label>
+                    <p class="produto-imagens-hint" id="pub-imagens-hint"></p>
+                    <label class="produto-imagens-drop" for="pub-imagens-input">
+                      <i class="fa-solid fa-images" aria-hidden="true"></i>
+                      <span>Anexar imagens</span>
+                    </label>
+                    <input type="file" id="pub-imagens-input" accept="image/png,image/jpeg,image/webp" multiple hidden />
+                    <ul id="pub-imagens-lista" class="produto-imagens-lista"></ul>
+                  </div>
+
+                  <div class="admin-file-card mb-4">
+                    <i class="fa-solid fa-layer-group text-brand-500 w-5 text-center" aria-hidden="true"></i>
+                    <div class="min-w-0 flex-1">
+                      <p class="text-sm font-medium text-white">Modelo carregado</p>
+                      <p id="pub-modelo-nome" class="text-[10px] text-slate-500 truncate">—</p>
+                    </div>
+                  </div>
+
+                  <label class="inline-flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer mb-2">
+                    <input type="checkbox" id="pub-incluir-captura" checked class="rounded border-slate-600 text-brand-500 focus:ring-brand-500" />
+                    Incluir captura da cena como imagem
+                  </label>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 border-t border-slate-800 px-6 py-4 bg-slate-950/30">
+                  <button type="submit" id="btn-publicar-produto" class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-400 text-brand-900 font-bold rounded-xl text-sm transition" disabled>
+                    <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+                    <span>Publicar na loja</span>
+                  </button>
+                  <div id="publicar-status" class="publicar-status w-full"></div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   </main>

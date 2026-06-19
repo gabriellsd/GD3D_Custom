@@ -544,6 +544,7 @@ import * as THREE from "three";
 
     function setPainelPosModelo(visible) {
       document.getElementById("painel-pos-modelo")?.classList.toggle("hidden", !visible);
+      document.getElementById("barra-tool-publicar")?.classList.toggle("hidden", !visible);
     }
 
     function clearModel() {
@@ -1792,7 +1793,9 @@ import * as THREE from "three";
         painelItems?.selecionarPorObject3d?.(importGroups[importGroups.length - 1].object3d);
       }
       ferramentas?.sincronizarCameras();
-      publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile);
+      const medidasConv = converterMedidas(geo, ultimoFormato);
+      const tamanhoSugerido = formatarMedida(medidasConv.maiorDim, medidasConv.unidade);
+      publicarProduto?.preencherSugestoes(arquivoMeta, ultimoArquivoFile, { tamanhoSugerido });
       setPainelPosModelo(true);
       const totalGrupos = painelItems?.getGrupos?.().length ?? importGroups.length;
       setStatus(

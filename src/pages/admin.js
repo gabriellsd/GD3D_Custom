@@ -8,6 +8,16 @@ import {
   storageObjectPath,
 } from '../data/products-cloud.js';
 import { initProductCatalog } from '../data/products.js';
+import { CATALOG_PRODUCTS } from '../data/products.catalog.js';
+import {
+  PRODUCT_FORM,
+  atualizarDatalistsCategorias,
+  descricaoPlaceholder,
+  initAnexarImagens,
+  mergeCatalogProducts,
+  parseSizes,
+  uploadImagensLoja,
+} from '../shared/product-form.js';
 import { formatBRL } from '../utils/format.js';
 
 const listEl = document.getElementById('admin-product-list');
@@ -24,6 +34,8 @@ let products = [];
 let selectedId = null;
 let searchQuery = '';
 let toastTimer = null;
+let catalogProducts = [...CATALOG_PRODUCTS];
+let imagensAnexadas = null;
 
 function escapeHtml(s) {
   return String(s)
@@ -40,6 +52,16 @@ function showToast(message, isError = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.add('is-hidden'), 4000);
 }
+
+function imagensOffsetBase(product) {
+  return product?.previewImages?.length || (product?.previewImage ? 1 : 0);
+}
+
+imagensAnexadas = initAnexarImagens({
+  listaEl: document.getElementById('admin-imagens-lista'),
+  inputEl: document.getElementById('admin-imagens-input'),
+  setStatus: (msg, isError) => showToast(msg, isError),
+});
 
 function setSaving(saving) {
   form?.classList.toggle('admin-saving', saving);
@@ -63,12 +85,13 @@ function updateStats() {
 }
 
 function updateDatalists() {
-  const cats = [...new Set(products.map((p) => p.category).filter(Boolean))];
-  const subs = [...new Set(products.map((p) => p.subcategory).filter(Boolean))];
-  const catList = document.getElementById('admin-categories');
-  const subList = document.getElementById('admin-subcategories');
-  if (catList) catList.innerHTML = cats.map((c) => `<option value="${escapeHtml(c)}">`).join('');
-  if (subList) subList.innerHTML = subs.map((s) => `<option value="${escapeHtml(s)}">`).join('');
+  catalogProducts = mergeCatalogProducts(products);
+  atualizarDatalistsCategorias({
+    catalogProducts,
+    catList: document.getElementById('admin-categories'),
+    subList: document.getElementById('admin-subcategories'),
+    categoryValue: form?.category?.value,
+  });
 }
 
 function filteredProducts() {
@@ -143,13 +166,28 @@ function renderQuickLinks(product) {
     .join('');
 }
 
+function labelImagemUrl(url, index) {
+  try {
+    const nome = decodeURIComponent(url.split('/').pop() || '');
+    if (/^view-\d+/i.test(nome)) return nome;
+  } catch {
+    /* ignore */
+  }
+  return index === 0 ? 'view-0.png (capa)' : `view-${index}.png`;
+}
+
 function renderFilesList(product) {
   if (!filesList) return;
   const files = [
-    { label: 'Imagem principal', url: product.previewImage, icon: 'fa-image' },
-    ...(product.previewImages || [])
-      .filter((u) => u !== product.previewImage)
-      .map((u, i) => ({ label: `Imagem ${i + 2}`, url: u, icon: 'fa-image' })),
+    ...(product.previewImages?.length
+      ? product.previewImages.map((u, i) => ({
+          label: labelImagemUrl(u, i),
+          url: u,
+          icon: 'fa-image',
+        }))
+      : product.previewImage
+        ? [{ label: 'view-0.png (capa)', url: product.previewImage, icon: 'fa-image' }]
+        : []),
     { label: 'Modelo STL', url: product.modelUrl, icon: 'fa-cube' },
     { label: 'Modelo 3MF', url: product.model3mfUrl, icon: 'fa-layer-group' },
   ].filter((f) => f.url);
@@ -225,9 +263,10 @@ function selectProduct(id) {
   form.featuredOrder.value = product.featuredOrder ?? 0;
 
   document.querySelectorAll('.admin-drop').forEach((d) => d.classList.remove('has-file'));
-  form.filePreview.value = '';
   form.fileStl.value = '';
   form.file3mf.value = '';
+  imagensAnexadas.limpar();
+  imagensAnexadas.setOffsetBase(imagensOffsetBase(product));
 
   updateHero(product);
   renderList();
@@ -253,6 +292,8 @@ function newProduct() {
   document.getElementById('admin-hero-img')?.classList.add('hidden');
   document.getElementById('admin-hero-placeholder')?.classList.remove('hidden');
   if (filesList) filesList.innerHTML = '';
+  imagensAnexadas.limpar();
+  imagensAnexadas.setOffsetBase(0);
 
   renderList();
   switchTab('geral');
@@ -286,13 +327,6 @@ async function uploadAsset(file, productRow) {
   return data.publicUrl;
 }
 
-function parseSizes(raw) {
-  return String(raw || '')
-    .split(/[,;|]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const supabase = getSupabase();
@@ -318,13 +352,19 @@ form?.addEventListener('submit', async (e) => {
   const row = productToRow({ ...existing, ...draft });
 
   try {
-    const previewUrl = await uploadAsset(form.filePreview.files[0], row);
+    const novasImagens = imagensAnexadas.getFiles();
+    const startIndex = imagensOffsetBase(existing);
+    const previewUrls = novasImagens.length
+      ? await uploadImagensLoja(supabase, row, novasImagens, startIndex)
+      : [];
+
     const stlUrl = await uploadAsset(form.fileStl.files[0], row);
     const mf3Url = await uploadAsset(form.file3mf.files[0], row);
 
-    if (previewUrl) {
-      row.preview_image = previewUrl;
-      row.preview_images = [...new Set([...(row.preview_images || []), previewUrl])];
+    if (previewUrls.length) {
+      row.preview_image = existing?.previewImage || previewUrls[0];
+      row.preview_images = [...new Set([...(existing?.previewImages || []), ...previewUrls])];
+      if (!row.preview_image) row.preview_image = previewUrls[0];
     }
     if (stlUrl) row.model_url = stlUrl;
     if (mf3Url) row.model3mf_url = mf3Url;
@@ -387,6 +427,8 @@ form?.slug?.addEventListener('input', () => {
   form.slug.dataset.auto = '0';
 });
 
+form?.category?.addEventListener('input', updateDatalists);
+
 document.querySelectorAll('.admin-drop input[type="file"]').forEach((input) => {
   input.addEventListener('change', () => {
     const drop = input.closest('.admin-drop');
@@ -408,6 +450,16 @@ document.querySelectorAll('.admin-drop').forEach((drop) => {
 initShell({ page: 'admin', title: 'Admin — GD3D Creative' }).then(async () => {
   const user = await requireRole('admin');
   if (!user) return;
+
+  const imagensHint = document.getElementById('admin-imagens-hint');
+  if (imagensHint) {
+    imagensHint.innerHTML = PRODUCT_FORM.imagesHint
+      .replace('view-0.png', '<strong>view-0.png</strong>')
+      .replace('view-1.png', '<strong>view-1.png</strong>')
+      .replace('view-2.png', '<strong>view-2.png</strong>');
+  }
+  if (form?.desc) form.desc.placeholder = descricaoPlaceholder();
+
   try {
     await loadProducts();
     if (products.length === 1) selectProduct(products[0].id);

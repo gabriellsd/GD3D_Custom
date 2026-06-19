@@ -230,6 +230,11 @@ function montarBarraLateralExibicao(container) {
         layout: "stack",
         conteudo: renderFerramentasFlyout(),
       })}
+      <div class="barra-grupo-tool barra-grupo-tool--solo hidden" id="barra-tool-publicar" data-grupo="publicar">
+        <button type="button" id="btn-abrir-publicar" class="barra-grupo-trigger barra-vistas-btn barra-grupo-trigger--accent" title="Publicar no site" aria-label="Publicar no site">
+          <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+        </button>
+      </div>
     </nav>`;
 
   container.appendChild(lateral);

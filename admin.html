@@ -89,59 +89,59 @@
               <input type="hidden" name="id" />
 
               <div class="admin-tab-panel is-active" data-panel="geral">
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div class="admin-field sm:col-span-2">
+                <div class="produto-form-grid">
+                  <div class="produto-form-field produto-form-field--full">
                     <label for="f-name">Nome do produto</label>
                     <input id="f-name" name="name" required />
                   </div>
-                  <div class="admin-field">
+                  <div class="produto-form-field">
                     <label for="f-price">Preço (R$)</label>
                     <input id="f-price" name="price" type="number" step="0.01" min="0" />
                   </div>
-                  <div class="admin-field">
+                  <div class="produto-form-field">
                     <label for="f-sizes">Tamanhos (separados por vírgula)</label>
                     <input id="f-sizes" name="sizes" placeholder="6 cm, 15 cm" />
                   </div>
-                  <div class="admin-field">
+                  <div class="produto-form-field">
                     <label for="f-category">Categoria</label>
                     <input id="f-category" name="category" required list="admin-categories" placeholder="Miniaturas" />
                   </div>
-                  <div class="admin-field">
+                  <div class="produto-form-field">
                     <label for="f-subcategory">Subcategoria</label>
                     <input id="f-subcategory" name="subcategory" list="admin-subcategories" placeholder="Animais" />
                   </div>
-                  <div class="admin-field sm:col-span-2">
+                  <div class="produto-form-field produto-form-field--full">
                     <label for="f-slug">Slug (pasta no storage)</label>
                     <input id="f-slug" name="slug" required />
-                    <p class="text-[11px] text-slate-600 mt-1">Gerado automaticamente a partir do nome.</p>
+                    <p class="produto-form-hint">Gerado automaticamente a partir do nome.</p>
+                  </div>
+                  <div class="produto-form-field produto-form-field--full">
+                    <label for="f-desc">Descrição</label>
+                    <textarea id="f-desc" name="desc" rows="4"></textarea>
                   </div>
                 </div>
               </div>
 
               <div class="admin-tab-panel" data-panel="loja">
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div class="admin-field sm:col-span-2">
-                    <label for="f-desc">Descrição na loja</label>
-                    <textarea id="f-desc" name="desc" rows="6"></textarea>
-                  </div>
-                  <div class="admin-field">
+                <div class="produto-form-grid">
+                  <div class="produto-form-field">
                     <label for="f-tag">Etiqueta (tag)</label>
                     <input id="f-tag" name="tag" placeholder="Miniaturas" />
                   </div>
-                  <div class="admin-field">
+                  <div class="produto-form-field">
                     <label for="f-icon">Ícone Font Awesome</label>
                     <input id="f-icon" name="icon" placeholder="fa-solid fa-crow" />
                   </div>
-                  <div class="admin-field sm:col-span-2 flex flex-wrap gap-6 pt-2">
+                  <div class="produto-form-field produto-form-field--full produto-form-toggles">
                     <label class="inline-flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
                       <input type="checkbox" name="published" checked class="rounded border-slate-600 text-brand-500 focus:ring-brand-500" />
                       Publicado na loja
                     </label>
                     <label class="inline-flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer">
                       <input type="checkbox" name="featured" class="rounded border-slate-600 text-brand-500 focus:ring-brand-500" />
-                      Destaque na página inicial
+                      Destaque na home
                     </label>
-                    <div class="inline-flex items-center gap-2 text-sm">
+                    <div class="inline-flex items-center gap-2 text-sm text-slate-300">
                       <span class="text-slate-400">Ordem destaque</span>
                       <input name="featuredOrder" type="number" min="0" class="w-16 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-white" />
                     </div>
@@ -151,13 +151,19 @@
 
               <div class="admin-tab-panel" data-panel="ficheiros">
                 <p class="text-sm text-slate-400 mb-4">Ficheiros no Supabase Storage. A loja prefere 3MF para o preview 3D.</p>
-                <div class="grid sm:grid-cols-3 gap-4 mb-6">
-                  <label class="admin-drop" data-drop="preview">
-                    <i class="fa-solid fa-image text-2xl text-slate-500"></i>
-                    <span class="text-sm font-semibold text-slate-300">Imagem PNG</span>
-                    <span class="text-[11px] text-slate-500">Clique ou arraste</span>
-                    <input type="file" name="filePreview" accept="image/png" />
+
+                <div class="produto-imagens-bloco mb-6">
+                  <label class="text-sm font-semibold text-white">Imagens da loja</label>
+                  <p class="produto-imagens-hint" id="admin-imagens-hint"></p>
+                  <label class="produto-imagens-drop" for="admin-imagens-input">
+                    <i class="fa-solid fa-images" aria-hidden="true"></i>
+                    <span>Anexar imagens</span>
                   </label>
+                  <input type="file" id="admin-imagens-input" accept="image/png,image/jpeg,image/webp" multiple hidden />
+                  <ul id="admin-imagens-lista" class="produto-imagens-lista"></ul>
+                </div>
+
+                <div class="grid sm:grid-cols-2 gap-4 mb-6">
                   <label class="admin-drop" data-drop="stl">
                     <i class="fa-solid fa-cube text-2xl text-slate-500"></i>
                     <span class="text-sm font-semibold text-slate-300">Modelo STL</span>

@@ -1,7 +1,15 @@
 /* Painel admin — GD3D Creative */
+@import "../shared/product-form.css";
 
 .admin-shell {
   --admin-sidebar: 320px;
+  --produto-form-border: #334155;
+  --produto-form-surface: rgba(15, 23, 42, 0.5);
+  --produto-form-field-bg: #020617;
+  --produto-form-text: #e2e8f0;
+  --produto-form-muted: #64748b;
+  --produto-form-accent: #e8a317;
+  --produto-form-accent-bg: rgba(232, 163, 23, 0.08);
 }
 
 .admin-stat {
@@ -82,16 +90,6 @@
 
 .admin-tab-panel.is-active {
   @apply block p-6 sm:p-8;
-}
-
-.admin-field label {
-  @apply block text-xs font-medium text-slate-400 mb-1.5;
-}
-
-.admin-field input,
-.admin-field textarea,
-.admin-field select {
-  @apply w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white text-sm focus:border-brand-500 focus:outline-none;
 }
 
 .admin-drop {

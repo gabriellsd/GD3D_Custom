@@ -114,6 +114,18 @@ export function initPainelItems(app) {
     render();
   }
 
+  function colapsarFilamentos() {
+    if (!estado.grupos.length) return;
+    for (const grupo of estado.grupos) grupo.expandido = false;
+    render();
+  }
+
+  function expandirFilamentos() {
+    if (!estado.grupos.length) return;
+    for (const grupo of estado.grupos) grupo.expandido = true;
+    render();
+  }
+
   function alternarVisibilidade(id) {
     const no = encontrarNo(id);
     if (!no) return;
@@ -355,11 +367,11 @@ export function initPainelItems(app) {
     });
 
     document.getElementById('items-btn-remover')?.addEventListener('click', () => {
-      removerSelecionados();
+      colapsarFilamentos();
     });
 
     document.getElementById('items-btn-adicionar')?.addEventListener('click', () => {
-      abrirSeletorFicheiros({ append: true });
+      expandirFilamentos();
     });
 
     fileInput?.addEventListener('change', (e) => {
